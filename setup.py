@@ -12,5 +12,5 @@ setup(name='keycloak',
       data_files = [('/usr/share/python-keycloak/templates',
                      ['templates/mellon_httpd.conf',
                       'templates/sp_metadata.tpl'])],
-      requires = ['requests', 'jinja2'],
+      requires = ['requests', 'requests-oauthlib', 'jinja2'],
      )
