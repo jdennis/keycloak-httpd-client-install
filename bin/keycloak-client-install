@@ -625,7 +625,7 @@ def main():
                              'error message')
     
     parser.add_argument('--log-file',
-                        default = '/var/log/{prog_name}.log'.format(
+                        default = '/var/log/python-keycloak/{prog_name}.log'.format(
                             prog_name=prog_name),
                         help='log file pathname')
 
