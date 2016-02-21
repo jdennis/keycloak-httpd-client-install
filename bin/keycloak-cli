@@ -1,0 +1,7 @@
+#!/usr/bin/python
+
+import sys
+
+from keycloak.keycloak_cli import main
+
+sys.exit(main())
