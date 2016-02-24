@@ -13,8 +13,10 @@ import requests
 import six
 import sys
 import traceback
-import urllib
-import urlparse
+
+from six.moves.urllib.parse import quote as urlquote
+from six.moves.urllib.parse import urlparse
+
 
 #-------------------------------------------------------------------------------
 
@@ -82,7 +84,7 @@ def configure_logging(options):
     try:
         file_handler = logging.handlers.RotatingFileHandler(
             options.log_file, backupCount=LOG_FILE_ROTATION_COUNT)
-    except IOError, e:
+    except IOError as e:
         print('Unable to open log file %s (%s)' % (options.log_file, e),
               file=sys.stderr)
 
@@ -113,7 +115,7 @@ def json_pretty(text):
 
 
 def server_name_from_url(url):
-    return urlparse.urlparse(url).netloc
+    return urlparse(url).netloc
 
 def get_realm_names_from_realms(realms):
     return [x['realm'] for x in realms]
@@ -143,7 +145,7 @@ class KeycloakConnection(object):
 
     def _create_session(self):
         token_url = TOKEN_URL_TEMPLATE.format(
-            server=self.server, realm=urllib.quote(self.realm))
+            server=self.server, realm=urlquote(self.realm))
         refresh_url = token_url
 
         client=LegacyApplicationClient(client_id=self.client_id)
@@ -213,7 +215,7 @@ class KeycloakConnection(object):
     def delete_realm(self, realm_name):
         cmd_name = "delete realm '{realm}'".format(realm=realm_name)
         url = DELETE_REALM_URL_TEMPLATE.format(
-            server=self.server, realm=urllib.quote(realm_name))
+            server=self.server, realm=urlquote(realm_name))
 
         logger.debug("%s on server %s", cmd_name, self.server)
         response = self.session.delete(url)
@@ -233,7 +235,7 @@ class KeycloakConnection(object):
     def get_realm_metadata(self, realm_name):
         cmd_name = "get metadata for realm '{realm}'".format(realm=realm_name)
         url = GET_REALM_METADATA_TEMPLATE.format(
-            server=self.server, realm=urllib.quote(realm_name))
+            server=self.server, realm=urlquote(realm_name))
 
         logger.debug("%s on server %s", cmd_name, self.server)
         response = self.session.get(url)
@@ -254,7 +256,7 @@ class KeycloakConnection(object):
     def get_clients(self, realm_name):
         cmd_name = "get clients in realm '{realm}'".format(realm=realm_name)
         url = GET_CLIENTS_URL_TEMPLATE.format(
-            server=self.server, realm=urllib.quote(realm_name))
+            server=self.server, realm=urlquote(realm_name))
 
         logger.debug("%s on server %s", cmd_name, self.server)
         response = self.session.get(url)
@@ -282,7 +284,7 @@ class KeycloakConnection(object):
         cmd_name = "get client descriptor realm '{realm}'".format(
             realm=realm_name)
         url = CLIENT_DESCRIPTOR_URL_TEMPLATE.format(
-            server=self.server, realm=urllib.quote(realm_name))
+            server=self.server, realm=urlquote(realm_name))
 
         logger.debug("%s on server %s", cmd_name, self.server)
 
@@ -314,7 +316,7 @@ class KeycloakConnection(object):
         cmd_name = "create client '{client_id}'in realm '{realm}'".format(
             client_id=descriptor['clientId'], realm=realm_name)
         url = CREATE_CLIENT_URL_TEMPLATE.format(
-            server=self.server, realm=urllib.quote(realm_name))
+            server=self.server, realm=urlquote(realm_name))
 
         logger.debug("%s on server %s", cmd_name, self.server)
 
@@ -336,8 +338,8 @@ class KeycloakConnection(object):
         cmd_name = "delete client id '{id}'in realm '{realm}'".format(
             id=id, realm=realm_name)
         url = DELETE_CLIENT_URL_TEMPLATE.format(
-            server=self.server, realm=urllib.quote(realm_name),
-            id=urllib.quote(id))
+            server=self.server, realm=urlquote(realm_name),
+            id=urlquote(id))
 
         logger.debug("%s on server %s", cmd_name, self.server)
         response = self.session.delete(url)

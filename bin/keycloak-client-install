@@ -116,7 +116,7 @@ def configure_logging(options):
     try:
         file_handler = logging.handlers.RotatingFileHandler(
             options.log_file, mode='w', backupCount=LOG_FILE_ROTATION_COUNT)
-    except IOError, e:
+    except IOError as e:
         print('Unable to open log file %s (%s)' % (options.log_file, e),
               file=sys.stderr)
 
@@ -306,10 +306,10 @@ def install_file_from_data(data, dst_file):
         dst_backup_file = dst_file + ".orig"
         if not os.path.exists(dst_backup_file):
             os.rename(dst_file, dst_backup_file)
-    with open(dst_file, 'wb') as f:
+    with open(dst_file, 'w') as f:
         f.write(data)
 
-def mkdir(pathname, mode=0775):
+def mkdir(pathname, mode=0o775):
     logger.debug('mkdir pathname="%s" mode=%#o', pathname, mode)
     if os.path.exists(pathname):
         if not os.path.isdir(pathname):
@@ -416,7 +416,7 @@ def pem_search(text, start=0):
     base64_text = text[base64_start:base64_end]
     try:
         binary_data = base64.b64decode(base64_text)
-    except Exception, e:
+    except Exception as e:
         binary_data = None
         raise InvalidBase64Error('failed to base64 decode %s PEM '
                                  'at position %d: %s' %
@@ -498,7 +498,7 @@ def load_cert_from_file(filename, format='base64_text'):
     :param string format: One of: 'base64_text', 'binary'
     :returns: cert in requested format
     '''
-    with open(filename, 'rb') as f:
+    with open(filename, 'r') as f:
         data = f.read()
     
     certs = parse_pem(data, 'cert')
@@ -543,10 +543,10 @@ def generate_cert(subject):
 
         run_cmd(cmd)
 
-        with open(key_file, 'rb') as f:
+        with open(key_file, 'r') as f:
             key = f.read()
 
-        with open(cert_file, 'rb') as f:
+        with open(cert_file, 'r') as f:
             cert = f.read()
 
     except Exception:
