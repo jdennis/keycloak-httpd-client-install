@@ -61,7 +61,7 @@ of a Keycloak server.
 %files -n python2-%{srcname}
 %license LICENSE.txt
 %doc README.md
-%doc doc/keycloak-client-install.md
+%doc doc/keycloak-httpd-client-install.md
 %{python2_sitelib}/*
 %{_bindir}/*
 %{_datadir}/python-%{srcname}/*
@@ -69,7 +69,7 @@ of a Keycloak server.
 %files -n python3-%{srcname}
 %license LICENSE.txt
 %doc README.md
-%doc doc/keycloak-client-install.md
+%doc doc/keycloak-httpd-client-install.md
 %{python3_sitelib}/*
 %{_bindir}/*
 %{_datadir}/python-%{srcname}/*

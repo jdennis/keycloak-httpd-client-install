@@ -1,8 +1,8 @@
-#keycloak-client-install(1) -- Configure Mellon SP to use Keycloak IdP
+#keycloak-httpd-client-install(1) -- Configure Mellon SP to use Keycloak IdP
 
 ## SYNOPSIS
 
-    keycloak-client-install [-h] [--no-root-check] [-v] [-d]
+    keycloak-httpd-client-install [-h] [--no-root-check] [-v] [-d]
                             [--show-traceback] [--log-file LOG_FILE]
                             --app-name APP_NAME [--force]
                             [--template-dir TEMPLATE_DIR]
@@ -83,13 +83,13 @@
 
 ## DESCRIPTION
 
-**keycloak-client-install** will configure a node running Apache with
+**keycloak-httpd-client-install** will configure a node running Apache with
 mod_auth_mellon as SAML Service Provider (**SP**) utilizing a **Keycloak**
 server as an Identity Provider (**IdP**).
 
 ## OPERATION
 
-**keycloak-client-install** performs the following operational steps:
+**keycloak-httpd-client-install** performs the following operational steps:
 
 1.  Connect to Keycloak Server.
 
@@ -103,13 +103,13 @@ server as an Identity Provider (**IdP**).
     
 2.  Create directories.
 
-    Files written by **keycloak-client-install** need a destination
+    Files written by **keycloak-httpd-client-install** need a destination
     directory (see [FILES]). If the necessary directories are not
     present they are created.
 
 3.  Set up template environment
 
-    Many of the files written by **keycloak-client-install** are based
+    Many of the files written by **keycloak-httpd-client-install** are based
     on `jinga2` templates. The default template file location can be
     overridden with the **--template-dir** option.
 
@@ -117,7 +117,7 @@ server as an Identity Provider (**IdP**).
 
     A SAML SP must have a X509 certificate and key used to sign and
     optionally encrypt it's SAML messages sent to the SAML
-    IdP. **keycloak-client-install** can generate a self-signed
+    IdP. **keycloak-httpd-client-install** can generate a self-signed
     certificate for you or you may supply your own key and certificate
     via the **--mellon-key-file** and **--mellon-cert-file**
     options. The files must be in PEM format.
@@ -145,7 +145,7 @@ server as an Identity Provider (**IdP**).
     specified by a Keycloak realm. The **--keycloak-realm** option
     identifies which Keycloak realm we will bind to. The Keycloak
     realm may already exist on the Keycloak server, if it does
-    **keycloak-client-install** will use it. If the Keycloak realm
+    **keycloak-httpd-client-install** will use it. If the Keycloak realm
     does not exist yet it will be created for you.
 
 8.  Query realm clients from Keycloak server, optionally delete existing.
@@ -155,7 +155,7 @@ server as an Identity Provider (**IdP**).
     which needs to be added to the Keycloak realm. However we must
     assure the new client does not conflict with an existing client on
     the Keycloak realm. If the Mellon SP is already registered on the
-    Keycloak realm **keycloak-client-install** will stop processing
+    Keycloak realm **keycloak-httpd-client-install** will stop processing
     and exit with an error unless the **--force** option is
     used. **--force** will cause the existing client on the Keycloak
     realm to be deleted first so that it can be replaced in the next
@@ -180,7 +180,7 @@ The overarching organization is the web application. An independent
 set of Mellon files are created per application and registered with
 the Keycloak server. This permits multiple indpendent SAML Service
 Providers and/or protected web resources to be handled by one Apache
-instance. When you run **keycloak-client-install** you must supply an
+instance. When you run **keycloak-httpd-client-install** you must supply an
 application name via the **--app-name** option.
 
 Within the web application you may protect via SAML multiple
@@ -197,7 +197,7 @@ root, each protected location inherits from that.
 
 ## FILES
 
-Files created by running **keycloak-client-install**:
+Files created by running **keycloak-httpd-client-install**:
 
   * *{httpd-dir}/conf.d/{app-name}\_mellon_keycloak\_{realm}.conf*
 
@@ -223,13 +223,13 @@ Files created by running **keycloak-client-install**:
     The Mellon SAML2 SP metadata file. It is generated from the
     `sp_metadata.xml` template file.
 
-Files referenced by **keycloak-client-install** when it runs:
+Files referenced by **keycloak-httpd-client-install** when it runs:
 
-  * */usr/share/python-keycloak/templates/\**
+  * */usr/share/python-keycloak-httpd-client/templates/\**
 
 Log files:
 
-  * */var/log/python-keycloak/keycloak-client-install.log*
+  * */var/log/python-keycloak-httpd-client/keycloak-httpd-client-install.log*
 
 ## DEBUGGING
 
@@ -240,9 +240,9 @@ consult the log file when debugging (see [LOGGING])
 
 ## LOGGING
 
-**keycloak-client-install** logs all it's operations to a rotated log
+**keycloak-httpd-client-install** logs all it's operations to a rotated log
   file. The default log file can be overridden with the **--log-file**
-  option. Each run of **keycloak-client-install** will create a new
+  option. Each run of **keycloak-httpd-client-install** will create a new
   log file. Any previous log file will be rotated as a numbered verson
   keeping a maximum of 3 previous log files. Logging to the log file
   occurs at the `DEBUG` level that includes all HTTP requests and
@@ -250,9 +250,9 @@ consult the log file when debugging (see [LOGGING])
 
 ## TEMPLATES
 
-Many of the files generated by **keycloak-client-install** are
+Many of the files generated by **keycloak-httpd-client-install** are
 produced via jinja2 templates substituting values determined by
-**keycloak-client-install** when it runs. The default template file
+**keycloak-httpd-client-install** when it runs. The default template file
 location can be overridden with the **--template-dir** option.
 
 ## EXIT STATUS

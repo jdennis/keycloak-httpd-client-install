@@ -625,7 +625,7 @@ def main():
                              'error message')
     
     parser.add_argument('--log-file',
-                        default = '/var/log/python-keycloak/{prog_name}.log'.format(
+                        default = '/var/log/python-keycloak-httpd-client/{prog_name}.log'.format(
                             prog_name=prog_name),
                         help='log file pathname')
 
@@ -642,7 +642,7 @@ def main():
     group = parser.add_argument_group('Program Configuration')
 
     group.add_argument('--template-dir',
-                       default='/usr/share/python-keycloak/templates'.format(
+                       default='/usr/share/python-keycloak-httpd-client/templates'.format(
                           prog_name=prog_name),
                        help='Template location')
 
