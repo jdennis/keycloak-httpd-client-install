@@ -1,15 +1,9 @@
 %global srcname keycloak-httpd-client
 %global summary Tools to configure Apache HTTPD as Keycloak client
 
-%if 0%{?rhel}
-%global with_python3 0
-%else
-%global with_python3 1
-%endif
-
 Name:           python-%{srcname}
 Version:        0.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        %{summary}
 
 %global git_tag RELEASE_%(r=%{version}; echo $r | tr '.' '_')
@@ -19,10 +13,9 @@ URL:            http://pypi.python.org/pypi/%{srcname}
 Source0:        https://github.com/jdennis/python-keycloak/archive/%{git_tag}.tar.gz#/%{srcname}-%{version}.tar.gz
 
 BuildArch:      noarch
+
 BuildRequires:  python2-devel
-%if 0%{?with_python3}
 BuildRequires:  python3-devel
-%endif  # with_python3
 
 %description
 Keycloak is an authentication server. This package contains libraries and
@@ -31,7 +24,12 @@ of a Keycloak server.
 
 %package -n python2-%{srcname}
 Summary:        %{summary}
+
 %{?python_provide:%python_provide python2-%{srcname}}
+
+Requires:       python-requests
+Requires:       python-requests-oauthlib
+Requires:       python-jinja2
 
 %description -n python2-%{srcname}
 Keycloak is an authentication server. This package contains libraries and
@@ -40,7 +38,12 @@ of a Keycloak server.
 
 %package -n python3-%{srcname}
 Summary:        %{summary}
+
 %{?python_provide:%python_provide python3-%{srcname}}
+
+Requires:       python3-requests
+Requires:       python3-requests-oauthlib
+Requires:       python3-jinja2
 
 %description -n python3-%{srcname}
 Keycloak is an authentication server. This package contains libraries and
