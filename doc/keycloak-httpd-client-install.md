@@ -2,23 +2,26 @@
 
 ## SYNOPSIS
 
-    keycloak-httpd-client-install [-h] [--no-root-check] [-v] [-d]
-                            [--show-traceback] [--log-file LOG_FILE]
-                            --app-name APP_NAME [--force]
-                            [--template-dir TEMPLATE_DIR]
-                            [--httpd-dir HTTPD_DIR] -r KEYCLOAK_REALM -s
-                            KEYCLOAK_SERVER_URL
-                            [-u KEYCLOAK_ADMIN_USERNAME] -p
-                            KEYCLOAK_ADMIN_PASSWORD
-                            [--mellon-key-file MELLON_KEY_FILE]
-                            [--mellon-cert-file MELLON_CERT_FILE]
-                            [--mellon-hostname MELLON_HOSTNAME]
-                            [--mellon-endpoint-path MELLON_ENDPOINT_PATH]
-                            [--mellon-entity-id MELLON_ENTITY_ID]
-                            [--mellon-organization-name MELLON_ORGANIZATION_NAME]
-                            [--mellon-organization-display-name MELLON_ORGANIZATION_DISPLAY_NAME]
-                            [--mellon-organization-url MELLON_ORGANIZATION_URL]
-                            [-l MELLON_PROTECTED_LOCATIONS]
+    usage: keycloak-httpd-client-install [-h] [--no-root-check] [-v] [-d]
+                                         [--show-traceback] [--log-file LOG_FILE]
+                                         --app-name APP_NAME [--force]
+                                         [--permit-insecure-transport]
+                                         [--template-dir TEMPLATE_DIR]
+                                         [--httpd-dir HTTPD_DIR] -r KEYCLOAK_REALM
+                                         -s KEYCLOAK_SERVER_URL
+                                         [-u KEYCLOAK_ADMIN_USERNAME] -p
+                                         KEYCLOAK_ADMIN_PASSWORD
+                                         [--mellon-key-file MELLON_KEY_FILE]
+                                         [--mellon-cert-file MELLON_CERT_FILE]
+                                         [--mellon-hostname MELLON_HOSTNAME]
+                                         [--mellon-endpoint-path MELLON_ENDPOINT_PATH]
+                                         [--mellon-entity-id MELLON_ENTITY_ID]
+                                         [--mellon-organization-name MELLON_ORGANIZATION_NAME]
+                                         [--mellon-organization-display-name MELLON_ORGANIZATION_DISPLAY_NAME]
+                                         [--mellon-organization-url MELLON_ORGANIZATION_URL]
+                                         [-l MELLON_PROTECTED_LOCATIONS]
+
+    Configure mod_auth_mellon as Keycloak client
 
     optional arguments:
       -h, --help            show this help message and exit
@@ -27,16 +30,19 @@
       -d, --debug           turn on debug info (default: False)
       --show-traceback      exceptions print traceback in addition to error
                             message (default: False)
-      --log-file LOG_FILE   log file pathname (default: /var/log/keycloak-client-
-                            install.log)
+      --log-file LOG_FILE   log file pathname (default: /var/log/python-keycloak-
+                            httpd-client/keycloak-httpd-client-install.log)
       --app-name APP_NAME   name of the web app being protected by mellon
                             (default: None)
       --force               forcefully override safety checks (default: False)
+      --permit-insecure-transport
+                            Normally secure transport such as TLS is required,
+                            defeat this check (default: False)
 
     Program Configuration:
       --template-dir TEMPLATE_DIR
                             Template location (default: /usr/share/python-
-                            keycloak/templates)
+                            keycloak-httpd-client/templates)
       --httpd-dir HTTPD_DIR
                             Template location (default: /etc/httpd)
 
@@ -100,7 +106,7 @@ server as an Identity Provider (**IdP**).
     **-keycloak-server-url** option. This step is performed first
     to assure the remaining steps can complete successfully. A session
     is maintained for efficiency reasons.
-    
+
 2.  Create directories.
 
     Files written by **keycloak-httpd-client-install** need a destination
@@ -138,7 +144,7 @@ server as an Identity Provider (**IdP**).
     SP metadata file. The Mellon SP metadata also instructs
     `mod_auth_mellon` how to operate. The Mellon SP is generated from
     the `sp_metadata.tpl` template file.
-    
+
 7.  Query realms from Keycloak server, optionally create new realm.
 
     Keycloak supports multi-tenancy, it may serve many IdP's each one
@@ -159,14 +165,14 @@ server as an Identity Provider (**IdP**).
     and exit with an error unless the **--force** option is
     used. **--force** will cause the existing client on the Keycloak
     realm to be deleted first so that it can be replaced in the next
-    step. 
+    step.
 
 9.  Create new SP client in Keycloak realm.
 
     The Mellon SP is registered with the Keycloak realm on the
     Keycloak server by sending the Keycloak server the Mellon SP
     metadata to the Keycloak server.
-    
+
 11. Retrieve IdP metadata from Keycloak server.
 
     The Mellon SP needs SAML metadata that describes the Keycloak
@@ -204,7 +210,7 @@ Files created by running **keycloak-httpd-client-install**:
     This is the primary Mellon configuration file for the application.
     It binds to the Keycloak realm IdP. It is generated from the
     `mellon_httpd.conf` template file.
-    
+
   * *{httpd-dir}/saml2/{app-name}.cert*
 
     The Mellon SP X509 certficate file in PEM format.
