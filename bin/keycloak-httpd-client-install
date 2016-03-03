@@ -21,7 +21,6 @@ import sys
 import tempfile
 import traceback
 
-
 #------------------------------ Global Variables -------------------------------
 
 logger = None
@@ -850,6 +849,11 @@ def main():
         else:
             logger.step('Use existing realm on Keycloak server')
 
+        logger.step('Get initial access token')
+        client_initial_access = conn.get_initial_access_token(
+            options.keycloak_realm)
+        initial_access_token = client_initial_access['token']
+
         logger.step('Query realm clients from Keycloak server')
         clients = conn.get_clients(options.keycloak_realm)
         client_ids = keycloak_cli.get_client_client_ids_from_clients(clients)
@@ -874,10 +878,8 @@ def main():
 
         logger.step('Creating new client')
         logger.info('Create new client "%s"', options.mellon_entity_id)
-        descriptor = conn.get_client_descriptor(options.keycloak_realm,
-                                                mellon_sp_metadata)
-        conn.create_client(options.keycloak_realm, descriptor)
-
+        conn.register_client(initial_access_token,
+                             options.keycloak_realm, mellon_sp_metadata)
 
         logger.step('Retrieve IdP metadata from Keycloak server')
         idp_metadata = conn.get_realm_metadata(options.keycloak_realm)

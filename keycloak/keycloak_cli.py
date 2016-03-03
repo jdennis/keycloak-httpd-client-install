@@ -30,11 +30,13 @@ CREATE_REALM_URL_TEMPLATE = '{server}/auth/admin/realms'
 DELETE_REALM_URL_TEMPLATE = '{server}/auth/admin/realms/{realm}'
 GET_REALM_METADATA_TEMPLATE = '{server}/auth/realms/{realm}/protocol/saml/descriptor'
 
-
 GET_CLIENTS_URL_TEMPLATE = '{server}/auth/admin/realms/{realm}/clients'
 CLIENT_DESCRIPTOR_URL_TEMPLATE = '{server}/auth/admin/realms/{realm}/client-description-converter'
 CREATE_CLIENT_URL_TEMPLATE = '{server}/auth/admin/realms/{realm}/clients'
 DELETE_CLIENT_URL_TEMPLATE = '{server}/auth/admin/realms/{realm}/clients/{id}'
+
+GET_INITIAL_ACCESS_TOKEN_TEMPLATE = '{server}/auth/admin/realms/{realm}/clients-initial-access'
+SAML2_CLIENT_REGISTRATION_TEMPLATE = '{server}/auth/realms/{realm}/clients/saml2-entity-descriptor'
 
 HTTP_FAILED_MSG_TEMPLATE = '{cmd} failed: {status}, {text}'
 
@@ -160,6 +162,40 @@ class KeycloakConnection(object):
                                     client_id=self.client_id)
 
         return session
+
+    def get_initial_access_token(self, realm_name):
+        cmd_name = "get initial access token for realm '{realm}'".format(
+            realm=realm_name)
+        url = GET_INITIAL_ACCESS_TOKEN_TEMPLATE.format(
+            server=self.server, realm=urlquote(realm_name))
+
+        logger.debug("%s on server %s", cmd_name, self.server)
+
+        params = {"expiration": 60, # seconds
+                  "count": 1,
+              }
+
+        response = self.session.post(url, json=params)
+        logger.debug("%s response code: %s %s",
+                     cmd_name, response.status_code, response.reason)
+
+        try:
+            response_json = response.json()
+        except ValueError as e:
+            response_json = None
+
+        if (not response_json or 
+            response.status_code != requests.codes.ok):
+            logger.error("%s error: status=%s (%s) text=%s",
+                         cmd_name, response.status_code, response.reason,
+                         response.text)
+            raise ValueError(HTTP_FAILED_MSG_TEMPLATE.format(
+                cmd=cmd_name, status=response.reason, text=response.text))
+
+        logger.debug("%s response = %s", cmd_name, json_pretty(response.text))
+
+        return response_json    # ClientInitialAccessPresentation
+
 
     def get_realms(self):
         cmd_name = "get realms"
@@ -312,8 +348,9 @@ class KeycloakConnection(object):
         return response_json
 
 
-    def create_client(self, realm_name, descriptor):
-        cmd_name = "create client '{client_id}'in realm '{realm}'".format(
+    def create_client_from_descriptor(self, realm_name, descriptor):
+        cmd_name = "create client from descriptor "
+        "'{client_id}'in realm '{realm}'".format(
             client_id=descriptor['clientId'], realm=realm_name)
         url = CREATE_CLIENT_URL_TEMPLATE.format(
             server=self.server, realm=urlquote(realm_name))
@@ -332,6 +369,47 @@ class KeycloakConnection(object):
                 cmd=cmd_name, status=response.reason, text=response.text))
 
         logger.debug("%s response = %s", cmd_name, response.text)
+
+
+    def create_client(self, realm_name, metadata):
+        logger.debug("create client in realm %s on server %s",
+                     realm_name, self.server)
+        descriptor = self.get_client_descriptor(realm_name, metadata)
+        self.create_client_from_descriptor(realm_name, descriptor)
+
+
+    def register_client(self, initial_access_token, realm_name, metadata):
+        cmd_name = "register_client realm '{realm}'".format(
+            realm=realm_name)
+        url = SAML2_CLIENT_REGISTRATION_TEMPLATE.format(
+            server=self.server, realm=urlquote(realm_name))
+
+        logger.debug("%s on server %s", cmd_name, self.server)
+
+        headers = {'Content-Type': 'application/xml;charset=utf-8',
+                   'Authorization': 'Bearer %s' % initial_access_token,} 
+
+        # FIXME
+        response = requests.post(url, headers=headers, data=metadata)
+        logger.debug("%s response code: %s %s",
+                     cmd_name, response.status_code, response.reason)
+
+        try:
+            response_json = response.json()
+        except ValueError as e:
+            response_json = None
+
+        if (not response_json or 
+            response.status_code != requests.codes.created):
+            logger.error("%s error: status=%s (%s) text=%s",
+                         cmd_name, response.status_code, response.reason,
+                         response.text)
+            raise ValueError(HTTP_FAILED_MSG_TEMPLATE.format(
+                cmd=cmd_name, status=response.reason, text=response.text))
+
+        logger.debug("%s response = %s", cmd_name, json_pretty(response.text))
+
+        return response_json    # ClientRepresentation
 
 
     def delete_client(self, realm_name, id):
@@ -380,8 +458,7 @@ def do_list_clients(options, conn):
 
 def do_create_client(options, conn):
     metadata = options.metadata.read()
-    descriptor = conn.get_client_descriptor(options.realm_name, metadata)
-    conn.create_client(options.realm_name, descriptor)
+    descriptor = conn.create_client(options.realm_name, metadata)
 
 def do_delete_client(options, conn):
     clients = conn.get_clients(options.realm_name)
