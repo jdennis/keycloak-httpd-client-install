@@ -664,6 +664,10 @@ def main():
     parser.add_argument('--force', action='store_true',
                         help='forcefully override safety checks')
 
+    parser.add_argument('--permit-insecure-transport',  action='store_true',
+                        help='Normally secure transport such as TLS '
+                        'is required, defeat this check')
+
     # ---- Argument Group "Program Configuration"  ----
 
     group = parser.add_argument_group('Program Configuration')
@@ -793,7 +797,8 @@ def main():
         logger.step('Connect to Keycloak Server')
         logger.info('Connecting to Keycloak server "%s"',
                     options.keycloak_server_url)
-        os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # FIXME
+        if options.permit_insecure_transport:
+            os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
         noauth_conn = keycloak_cli.KeycloakNoAuthConnection(
             options.keycloak_server_url)

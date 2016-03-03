@@ -557,6 +557,10 @@ def main():
                             prog_name=prog_name),
                         help='log file pathname')
 
+    parser.add_argument('--permit-insecure-transport',  action='store_true',
+                        help='Normally secure transport such as TLS '
+                        'is required, defeat this check')
+
     group = parser.add_argument_group('Server')
 
     group.add_argument('-s', '--server',
@@ -635,7 +639,8 @@ def main():
     options = parser.parse_args()
     configure_logging(options)
 
-    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # FIXME
+    if options.permit_insecure_transport:
+        os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
     try:
         admin_conn = KeycloakAdminConnection(options.server, 'master',
