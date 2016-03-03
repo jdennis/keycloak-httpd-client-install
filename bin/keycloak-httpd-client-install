@@ -1,16 +1,18 @@
 #!/usr/bin/python -E
 
-from __future__ import print_function 
+from __future__ import print_function
 
 import argparse
 import base64
 import copy
+import grp
 import jinja2
 from keycloak import keycloak_cli
 import logging
 import logging.handlers
 from collections import namedtuple
 import os
+import pwd
 import re
 import requests
 import shutil
@@ -21,7 +23,10 @@ import sys
 import tempfile
 import traceback
 
-#------------------------------ Global Variables -------------------------------
+from six.moves.urllib.parse import quote as urlquote
+from six.moves.urllib.parse import urlparse
+
+# ----------------------------- Global Variables ------------------------------
 
 logger = None
 template_env = None
@@ -29,7 +34,10 @@ prog_name = os.path.basename(sys.argv[0])
 LOG_FILE_ROTATION_COUNT = 3
 BIN_TIMEOUT = "/usr/bin/timeout"
 
-#--------------------------------- Constants -----------------------------------
+# -------------------------------- Constants ----------------------------------
+
+DEV_NULL = '/dev/null'
+BIN_TIMEOUT = '/usr/bin/timeout'
 
 HTTPD_SAML_DIR = 'saml2'
 HTTPD_CONF_DIR = 'conf.d'
@@ -46,18 +54,20 @@ STATUS_INSUFFICIENT_PRIVILEGE = 3
 STATUS_COMMUNICATION_ERROR = 4
 STATUS_ALREADY_EXISTS_ERROR = 5
 
-#---------------------------- Exception Definitions ----------------------------
+# --------------------------- Exception Definitions ---------------------------
+
 
 class AlreadyExistsError(ValueError):
     pass
 
-#---------------------------- Logging Configuration ----------------------------
+# --------------------------- Logging Configuration ---------------------------
 
 
 def configure_logging(options):
     global logger  # pylint: disable=W0603
 
     STEP = logging.INFO + 1
+
     class StepLogger(logging.Logger):
 
         def __init__(self, name):
@@ -66,7 +76,7 @@ def configure_logging(options):
 
         def step(self, msg, *args, **kwargs):
             if self.isEnabledFor(STEP):
-                self._log(STEP, ('[Step %2d] ' % self.step_number) +  msg,
+                self._log(STEP, ('[Step %2d] ' % self.step_number) + msg,
                           args, **kwargs)
                 self.step_number += 1
 
@@ -89,25 +99,26 @@ def configure_logging(options):
         log_level = logging.INFO
     if options.debug:
         log_level = logging.DEBUG
-        
+
         # These two lines enable debugging at httplib level
         # (requests->urllib3->http.client) You will see the REQUEST,
         # including HEADERS and DATA, and RESPONSE with HEADERS but
         # without DATA.  The only thing missing will be the
         # response.body which is not logged.
         try:
-            import http.client as http_client # Python 3
+            import http.client as http_client  # Python 3
         except ImportError:
-            import httplib as http_client # Python 2
+            import httplib as http_client      # Python 2
 
         http_client.HTTPConnection.debuglevel = 1
 
         # Turn on cookielib debugging
-        #try:
-        #    import http.cookiejar as cookiejar
-        #except ImportError:
-        #    import cookielib as cookiejar # Python 2
-        #cookiejar.debug = True
+        if False:
+            try:
+                import http.cookiejar as cookiejar
+            except ImportError:
+                import cookielib as cookiejar  # Python 2
+            cookiejar.debug = True
 
     root_logger = logging.getLogger()
     logger = logging.getLogger(prog_name)
@@ -126,7 +137,7 @@ def configure_logging(options):
         file_handler.setLevel(logging.DEBUG)
         root_logger.addHandler(file_handler)
 
-        if need_roll:    
+        if need_roll:
             file_handler.doRollover()
 
     console_handler = logging.StreamHandler(sys.stdout)
@@ -141,7 +152,8 @@ def configure_logging(options):
     # handler basis.
     root_logger.setLevel(1)
 
-#--------------------------- Shell Command Utilities ---------------------------
+# -------------------------- Shell Command Utilities --------------------------
+
 
 def nolog_replace(string, nolog):
     """Replace occurences of strings given in `nolog` with XXXXXXXX"""
@@ -149,7 +161,7 @@ def nolog_replace(string, nolog):
         if not isinstance(value, six.string_types):
             continue
 
-        quoted = urllib.parse.quote(value)
+        quoted = urlquote(value)
         shquoted = shell_quote(value)
         for nolog_value in (shquoted, value, quoted):
             string = string.replace(nolog_value, 'XXXXXXXX')
@@ -159,9 +171,10 @@ def nolog_replace(string, nolog):
 def shell_quote(string):
     return "'" + string.replace("'", "'\\''") + "'"
 
+
 def run_cmd(args, stdin=None, raiseonerr=True,
-        nolog=(), env=None, capture_output=True, skip_output=False, cwd=None,
-        runas=None, timeout=None, suplementary_groups=[]):
+            nolog=(), env=None, capture_output=True, skip_output=False,
+            cwd=None, runas=None, timeout=None, suplementary_groups=[]):
     """
     Execute a command and return stdin, stdout and the process return code.
 
@@ -211,11 +224,13 @@ def run_cmd(args, stdin=None, raiseonerr=True,
     if env is None:
         # copy default env
         env = copy.deepcopy(os.environ)
-        env["PATH"] = "/bin:/sbin:/usr/kerberos/bin:/usr/kerberos/sbin:/usr/bin:/usr/sbin"
+        env["PATH"] = (
+            "/bin:/sbin:/usr/kerberos/bin:"
+            "/usr/kerberos/sbin:/usr/bin:/usr/sbin")
     if stdin:
         p_in = subprocess.PIPE
     if skip_output:
-        p_out = p_err = open(paths.DEV_NULL, 'w')
+        p_out = p_err = open(DEV_NULL, 'w')
     elif capture_output:
         p_out = subprocess.PIPE
         p_err = subprocess.PIPE
@@ -223,7 +238,7 @@ def run_cmd(args, stdin=None, raiseonerr=True,
     if timeout:
         # If a timeout was provided, use the timeout command
         # to execute the requested command.
-        args[0:0] = [paths.BIN_TIMEOUT, str(timeout)]
+        args[0:0] = [BIN_TIMEOUT, str(timeout)]
 
     arg_string = nolog_replace(' '.join(shell_quote(a) for a in args), nolog)
     logger.debug('Starting external process')
@@ -238,7 +253,7 @@ def run_cmd(args, stdin=None, raiseonerr=True,
         ]
 
         logger.debug('runas=%s (UID %d, GID %s)', runas,
-            pent.pw_uid, pent.pw_gid)
+                     pent.pw_uid, pent.pw_gid)
         if suplementary_groups:
             for group, gid in zip(suplementary_groups, suplementary_gids):
                 logger.debug('suplementary_group=%s (GID %d)', group, gid)
@@ -253,8 +268,8 @@ def run_cmd(args, stdin=None, raiseonerr=True,
         p = subprocess.Popen(args, stdin=p_in, stdout=p_out, stderr=p_err,
                              close_fds=True, env=env, cwd=cwd,
                              preexec_fn=preexec_fn)
-        stdout,stderr = p.communicate(stdin)
-        stdout,stderr = str(stdout), str(stderr)    # Make pylint happy
+        stdout, stderr = p.communicate(stdin)
+        stdout, stderr = str(stdout), str(stderr)    # Make pylint happy
     except KeyboardInterrupt:
         logger.debug('Process interrupted')
         p.wait()
@@ -280,7 +295,7 @@ def run_cmd(args, stdin=None, raiseonerr=True,
         logger.debug('stderr=%s' % stderr)
 
     if p.returncode != 0 and raiseonerr:
-        raise CalledProcessError(p.returncode, arg_string, stdout)
+        raise subprocess.CalledProcessError(p.returncode, arg_string, stdout)
 
     return (stdout, stderr, p.returncode)
 
@@ -296,6 +311,7 @@ def install_file(src_file, dst_file):
             os.rename(dst_file, dst_backup_file)
     shutil.copy(src_file, dst_file)
 
+
 def install_file_from_data(data, dst_file):
     logger.debug('install_file_from_data dst_file="%s"', dst_file)
     if os.path.exists(dst_file):
@@ -307,6 +323,7 @@ def install_file_from_data(data, dst_file):
             os.rename(dst_file, dst_backup_file)
     with open(dst_file, 'w') as f:
         f.write(data)
+
 
 def mkdir(pathname, mode=0o775):
     logger.debug('mkdir pathname="%s" mode=%#o', pathname, mode)
@@ -322,7 +339,8 @@ def httpd_restart():
     cmd = ['/usr/bin/systemctl', 'restart', 'httpd.service']
     run_cmd(cmd)
 
-#------------------------------- PEM Utilities ---------------------------------
+# ------------------------------ PEM Utilities --------------------------------
+
 
 class InvalidBase64Error(ValueError):
     pass
@@ -488,7 +506,8 @@ def parse_pem(text, pem_type=None, max_items=None):
 
     return pem_blocks
 
-#--------------------- Certificate Creation & Installation ---------------------
+# -------------------- Certificate Creation & Installation --------------------
+
 
 def load_cert_from_file(filename, format='base64_text'):
     '''Load a cert from a file, return as either base64 text or binary.
@@ -499,7 +518,7 @@ def load_cert_from_file(filename, format='base64_text'):
     '''
     with open(filename, 'r') as f:
         data = f.read()
-    
+
     certs = parse_pem(data, 'cert')
 
     if len(certs) == 0:
@@ -519,7 +538,8 @@ def load_cert_from_file(filename, format='base64_text'):
     else:
         raise ValueError('Uknown format "{format}"'.format(
             format=format))
-    
+
+
 def generate_cert(subject):
     '''Generate self-signed cert and key.
 
@@ -555,6 +575,7 @@ def generate_cert(subject):
 
     return key, cert
 
+
 def install_mellon_cert(options):
     if options.mellon_key_file or options.mellon_cert_file:
         if not (options.mellon_key_file and options.mellon_cert_file):
@@ -568,28 +589,33 @@ def install_mellon_cert(options):
         install_file_from_data(key, options.mellon_dst_key_file)
         install_file_from_data(cert, options.mellon_dst_cert_file)
 
-#----------------------------- Template Builders -------------------------------
+# ---------------------------- Template Builders ------------------------------
+
 
 def build_template_params(options):
     params = dict([(x, getattr(options, x)) for x in dir(options)
                    if not x.startswith('_')])
     return params
 
+
 def build_mellon_httpd_config_file(options):
     template_params = build_template_params(options)
     template = template_env.get_template(MELLON_HTTPD_CONFIG_TEMPLATE)
     return template.render(template_params)
+
 
 def build_mellon_sp_metadata_file(options):
     template_params = build_template_params(options)
     template = template_env.get_template(MELLON_METADATA_TEMPLATE)
     return template.render(template_params)
 
-#------------- Argparse Argument Conversion/Validation Functions ---------------
+# ------------ Argparse Argument Conversion/Validation Functions --------------
+
 
 def arg_type_mellon_endpoint_path(value):
     value = value.strip(' /')
     return value
+
 
 def arg_type_mellon_protected_location(value):
     if not value.startswith('/'):
@@ -597,14 +623,16 @@ def arg_type_mellon_protected_location(value):
                                          '(arg="%s")' % value)
     return value
 
-#-------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+
 
 def main():
     global logger, template_env
 
     # ===== Command Line Arguments =====
-    parser = argparse.ArgumentParser(description='Configure mod_auth_mellon as Keycloak client',
-            prog = prog_name,
+    parser = argparse.ArgumentParser(
+            description='Configure mod_auth_mellon as Keycloak client',
+            prog=prog_name,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     # ---- Common Arguments ----
@@ -622,10 +650,11 @@ def main():
     parser.add_argument('--show-traceback', action='store_true',
                         help='exceptions print traceback in addition to '
                              'error message')
-    
+
     parser.add_argument('--log-file',
-                        default = '/var/log/python-keycloak-httpd-client/{prog_name}.log'.format(
-                            prog_name=prog_name),
+                        default=('/var/log/python-keycloak-httpd-client/'
+                                 '{prog_name}.log'.
+                                 format(prog_name=prog_name)),
                         help='log file pathname')
 
     parser.add_argument('--app-name',
@@ -635,18 +664,18 @@ def main():
     parser.add_argument('--force', action='store_true',
                         help='forcefully override safety checks')
 
-
     # ---- Argument Group "Program Configuration"  ----
 
     group = parser.add_argument_group('Program Configuration')
 
     group.add_argument('--template-dir',
-                       default='/usr/share/python-keycloak-httpd-client/templates'.format(
-                          prog_name=prog_name),
+                       default=('/usr/share/'
+                                'python-keycloak-httpd-client/templates'.
+                                format(prog_name=prog_name)),
                        help='Template location')
 
     group.add_argument('--httpd-dir',
-                       default = '/etc/httpd',
+                       default='/etc/httpd',
                        help='Template location')
 
     # ---- Argument Group "Keycloak IdP"  ----
@@ -686,7 +715,8 @@ def main():
                        help='The root directory of the SAML2 endpoints, '
                             'relative to the root of the web server. '
                             'mod_auth_mellon will handle SAML requests to '
-                            'https://{mellon_hostname}/{mellon-endpoint-path}/*. '
+                            'https://{mellon_hostname}/'
+                            '{mellon-endpoint-path}/*. '
                             'The path you specify must be contained within '
                             'the current Location directive.')
 
@@ -717,7 +747,6 @@ def main():
         print("You must be root to run this program",
               file=sys.stderr)
         return STATUS_INSUFFICIENT_PRIVILEGE
-    
 
     # ===== Configure Logging =====
 
@@ -729,34 +758,34 @@ def main():
     options.httpd_conf_dir = os.path.join(options.httpd_dir, HTTPD_CONF_DIR)
     options.mellon_httpd_config_filename = \
         os.path.join(options.httpd_conf_dir,
-        '{app_name}_mellon_keycloak_{realm}.conf'.format(
-            app_name=options.app_name,
-            realm=options.keycloak_realm))
+                     '{app_name}_mellon_keycloak_{realm}.conf'.format(
+                         app_name=options.app_name,
+                         realm=options.keycloak_realm))
     options.mellon_sp_metadata_filename = \
         os.path.join(options.httpd_saml_dir,
-        '{app_name}_{mellon_metadata}').format(
-            app_name=options.app_name,
-            mellon_metadata=MELLON_METADATA)
+                     '{app_name}_{mellon_metadata}').format(
+                         app_name=options.app_name,
+                         mellon_metadata=MELLON_METADATA)
     options.mellon_dst_key_file = \
         os.path.join(options.httpd_saml_dir,
-        '{app_name}.key'.format(
-            app_name=options.app_name))
+                     '{app_name}.key'.format(
+                         app_name=options.app_name))
     options.mellon_dst_cert_file = \
         os.path.join(options.httpd_saml_dir, '{app_name}.cert'.format(
             app_name=options.app_name))
     options.mellon_dst_idp_metadata_file = \
         os.path.join(options.httpd_saml_dir,
-        '{app_name}_keycloak_{realm}_idp_metadata.xml'.format(
-            app_name=options.app_name,
-            realm=options.keycloak_realm))
+                     '{app_name}_keycloak_{realm}_idp_metadata.xml'.format(
+                         app_name=options.app_name,
+                         realm=options.keycloak_realm))
     options.mellon_http_url = \
         'https://{mellon_hostname}'.format(
             mellon_hostname=options.mellon_hostname)
     if not options.mellon_entity_id:
-        options.mellon_entity_id = \
-        '{mellon_http_url}/{mellon_endpoint_path}/metadata'.format(
-            mellon_http_url=options.mellon_http_url,
-            mellon_endpoint_path=options.mellon_endpoint_path)
+        options.mellon_entity_id = (
+            '{mellon_http_url}/{mellon_endpoint_path}/metadata'.format(
+                mellon_http_url=options.mellon_http_url,
+                mellon_endpoint_path=options.mellon_endpoint_path))
 
     # ===== Establish Keycloak Server Communication =====
 
@@ -764,13 +793,17 @@ def main():
         logger.step('Connect to Keycloak Server')
         logger.info('Connecting to Keycloak server "%s"',
                     options.keycloak_server_url)
-        os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1' # FIXME
-        conn = keycloak_cli.KeycloakConnection(options.keycloak_server_url,
-                                               'master',
-                                               keycloak_cli.ADMIN_CLIENT_ID,
-                                               options.keycloak_admin_username,
-                                               options.keycloak_admin_password)
-    except Exception as e: 
+        os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # FIXME
+
+        noauth_conn = keycloak_cli.KeycloakNoAuthConnection(
+            options.keycloak_server_url)
+
+        admin_conn = keycloak_cli.KeycloakAdminConnection(
+            options.keycloak_server_url,
+            'master',
+            keycloak_cli.ADMIN_CLIENT_ID,
+            options.keycloak_admin_username, options.keycloak_admin_password)
+    except Exception as e:
         if options.show_traceback:
             traceback.print_exc()
         print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
@@ -783,13 +816,13 @@ def main():
         logger.step('Create Directories')
         mkdir(options.httpd_saml_dir)
         mkdir(options.httpd_conf_dir)
-    except Exception as e: 
+    except Exception as e:
         if options.show_traceback:
             traceback.print_exc()
         print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
               file=sys.stderr)
         return STATUS_OPERATION_ERROR
-                                  
+
     # ===== Create jinja2 Template Environment =====
 
     try:
@@ -800,7 +833,7 @@ def main():
                                           undefined=jinja2.StrictUndefined,
                                           loader=jinja2.FileSystemLoader(
                                               options.template_dir))
-    except Exception as e: 
+    except Exception as e:
         if options.show_traceback:
             traceback.print_exc()
         print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
@@ -817,7 +850,6 @@ def main():
         options.sp_signing_cert = cert_base64
         options.sp_encryption_cert = cert_base64
 
-
         logger.step('Build Mellon httpd config file')
         mellon_httpd_config = build_mellon_httpd_config_file(options)
         install_file_from_data(mellon_httpd_config,
@@ -826,8 +858,8 @@ def main():
         logger.step('Build Mellon SP metadata file')
         mellon_sp_metadata = build_mellon_sp_metadata_file(options)
         install_file_from_data(mellon_sp_metadata,
-                               options.mellon_sp_metadata_filename)  
-    except Exception as e: 
+                               options.mellon_sp_metadata_filename)
+    except Exception as e:
         if options.show_traceback:
             traceback.print_exc()
         print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
@@ -838,24 +870,24 @@ def main():
 
     try:
         logger.step('Query realms from Keycloak server')
-        realms = conn.get_realms()
+        realms = admin_conn.get_realms()
         realm_names = keycloak_cli.get_realm_names_from_realms(realms)
         logger.info('existing realms [%s]', ', '.join(realm_names))
 
         if options.keycloak_realm not in realm_names:
             logger.step('Create realm on Keycloak server')
             logger.info('Create realm "%s"', options.keycloak_realm)
-            conn.create_realm(options.keycloak_realm)
+            admin_conn.create_realm(options.keycloak_realm)
         else:
             logger.step('Use existing realm on Keycloak server')
 
         logger.step('Get initial access token')
-        client_initial_access = conn.get_initial_access_token(
+        client_initial_access = admin_conn.get_initial_access_token(
             options.keycloak_realm)
         initial_access_token = client_initial_access['token']
 
         logger.step('Query realm clients from Keycloak server')
-        clients = conn.get_clients(options.keycloak_realm)
+        clients = admin_conn.get_clients(options.keycloak_realm)
         client_ids = keycloak_cli.get_client_client_ids_from_clients(clients)
         logger.info('existing clients in realm %s = [%s]',
                     options.keycloak_realm, ', '.join(client_ids))
@@ -864,33 +896,34 @@ def main():
             if options.force:
                 logger.step('Force delete client on Keycloak server')
                 logger.info('Delete client "%s"', options.mellon_entity_id)
-                # FIXME: should this sequence be keycloak_cli delete_client_by_naem method?
+                # FIXME: should this sequence be keycloak_cli delete_client_by_name method?
                 client = keycloak_cli.find_client_by_name(clients,
                                                           options.mellon_entity_id)
                 id = client.get('id')
-                conn.delete_client(options.keycloak_realm, id)
+                admin_conn.delete_client(options.keycloak_realm, id)
             else:
-                raise AlreadyExistsError('client "{client_id}" already exists in '
-                                         'realm "{realm}". '
+                raise AlreadyExistsError('client "{client_id}" '
+                                         'already exists in realm "{realm}". '
                                          'Use --force to replace it.'.format(
                                              client_id=options.mellon_entity_id,
                                              realm=options.keycloak_realm))
 
         logger.step('Creating new client')
         logger.info('Create new client "%s"', options.mellon_entity_id)
-        conn.register_client(initial_access_token,
-                             options.keycloak_realm, mellon_sp_metadata)
+        noauth_conn.register_client(initial_access_token,
+                                    options.keycloak_realm, mellon_sp_metadata)
 
         logger.step('Retrieve IdP metadata from Keycloak server')
-        idp_metadata = conn.get_realm_metadata(options.keycloak_realm)
-        install_file_from_data(idp_metadata, options.mellon_dst_idp_metadata_file)
+        idp_metadata = admin_conn.get_realm_metadata(options.keycloak_realm)
+        install_file_from_data(idp_metadata,
+                               options.mellon_dst_idp_metadata_file)
 
-    except AlreadyExistsError as e: 
+    except AlreadyExistsError as e:
         if options.show_traceback:
             traceback.print_exc()
         print(six.text_type(e), file=sys.stderr)
         return STATUS_ALREADY_EXISTS_ERROR
-    except Exception as e: 
+    except Exception as e:
         if options.show_traceback:
             traceback.print_exc()
         print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
@@ -899,12 +932,10 @@ def main():
 
     # ===== Wrap Up =====
 
-
     logger.step('Completed Successfully')
     return STATUS_SUCCESS
 
-#-------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 
 if __name__ == '__main__':
     sys.exit(main())
-

@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-from __future__ import print_function 
+from __future__ import print_function
 
 import argparse
 import json
@@ -18,32 +18,44 @@ from six.moves.urllib.parse import quote as urlquote
 from six.moves.urllib.parse import urlparse
 
 
-#-------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 logger = None
 prog_name = os.path.basename(sys.argv[0])
 LOG_FILE_ROTATION_COUNT = 3
 
-TOKEN_URL_TEMPLATE = '{server}/auth/realms/{realm}/protocol/openid-connect/token'
-GET_REALMS_URL_TEMPLATE = '{server}/auth/admin/realms'
-CREATE_REALM_URL_TEMPLATE = '{server}/auth/admin/realms'
-DELETE_REALM_URL_TEMPLATE = '{server}/auth/admin/realms/{realm}'
-GET_REALM_METADATA_TEMPLATE = '{server}/auth/realms/{realm}/protocol/saml/descriptor'
+TOKEN_URL_TEMPLATE = (
+    '{server}/auth/realms/{realm}/protocol/openid-connect/token')
+GET_REALMS_URL_TEMPLATE = (
+    '{server}/auth/admin/realms')
+CREATE_REALM_URL_TEMPLATE = (
+    '{server}/auth/admin/realms')
+DELETE_REALM_URL_TEMPLATE = (
+    '{server}/auth/admin/realms/{realm}')
+GET_REALM_METADATA_TEMPLATE = (
+    '{server}/auth/realms/{realm}/protocol/saml/descriptor')
 
-GET_CLIENTS_URL_TEMPLATE = '{server}/auth/admin/realms/{realm}/clients'
-CLIENT_DESCRIPTOR_URL_TEMPLATE = '{server}/auth/admin/realms/{realm}/client-description-converter'
-CREATE_CLIENT_URL_TEMPLATE = '{server}/auth/admin/realms/{realm}/clients'
-DELETE_CLIENT_URL_TEMPLATE = '{server}/auth/admin/realms/{realm}/clients/{id}'
+GET_CLIENTS_URL_TEMPLATE = (
+    '{server}/auth/admin/realms/{realm}/clients')
+CLIENT_DESCRIPTOR_URL_TEMPLATE = (
+    '{server}/auth/admin/realms/{realm}/client-description-converter')
+CREATE_CLIENT_URL_TEMPLATE = (
+    '{server}/auth/admin/realms/{realm}/clients')
+DELETE_CLIENT_URL_TEMPLATE = (
+    '{server}/auth/admin/realms/{realm}/clients/{id}')
 
-GET_INITIAL_ACCESS_TOKEN_TEMPLATE = '{server}/auth/admin/realms/{realm}/clients-initial-access'
-SAML2_CLIENT_REGISTRATION_TEMPLATE = '{server}/auth/realms/{realm}/clients/saml2-entity-descriptor'
+GET_INITIAL_ACCESS_TOKEN_TEMPLATE = (
+    '{server}/auth/admin/realms/{realm}/clients-initial-access')
+SAML2_CLIENT_REGISTRATION_TEMPLATE = (
+    '{server}/auth/realms/{realm}/clients/saml2-entity-descriptor')
 
 HTTP_FAILED_MSG_TEMPLATE = '{cmd} failed: {status}, {text}'
 
 
 ADMIN_CLIENT_ID = 'admin-cli'
 
-#-------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+
 
 def configure_logging(options):
     global logger  # pylint: disable=W0603
@@ -61,25 +73,26 @@ def configure_logging(options):
         log_level = logging.INFO
     if options.debug:
         log_level = logging.DEBUG
-        
+
         # These two lines enable debugging at httplib level
         # (requests->urllib3->http.client) You will see the REQUEST,
         # including HEADERS and DATA, and RESPONSE with HEADERS but
         # without DATA.  The only thing missing will be the
         # response.body which is not logged.
         try:
-            import http.client as http_client # Python 3
+            import http.client as http_client  # Python 3
         except ImportError:
-            import httplib as http_client # Python 2
+            import httplib as http_client      # Python 2
 
         http_client.HTTPConnection.debuglevel = 1
 
         # Turn on cookielib debugging
-        #try:
-        #    import http.cookiejar as cookiejar
-        #except ImportError:
-        #    import cookielib as cookiejar # Python 2
-        #cookiejar.debug = True
+        if False:
+            try:
+                import http.cookiejar as cookiejar
+            except ImportError:
+                import cookielib as cookiejar  # Python 2
+            cookiejar.debug = True
 
     logger = logging.getLogger(prog_name)
 
@@ -109,7 +122,8 @@ def configure_logging(options):
     # handler basis.
     logger.setLevel(1)
 
-#-------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+
 
 def json_pretty(text):
     return json.dumps(json.loads(text),
@@ -119,49 +133,29 @@ def json_pretty(text):
 def server_name_from_url(url):
     return urlparse(url).netloc
 
+
 def get_realm_names_from_realms(realms):
     return [x['realm'] for x in realms]
 
+
 def get_client_client_ids_from_clients(clients):
     return [x['clientId'] for x in clients]
+
 
 def find_client_by_name(clients, client_id):
     for client in clients:
         if client.get('clientId') == client_id:
             return client
     raise KeyError('{item} not found'.format(item=client_id))
-        
 
-#-------------------------------------------------------------------------------
 
-class KeycloakConnection(object):
+# ------------------------------------------------------------------------------
 
-    def __init__(self, server, realm, client_id, username, password):
+class KeycloakREST(object):
+
+    def __init__(self, server, session=None):
         self.server = server
-        self.realm = realm
-        self.client_id = client_id
-        self.username = username
-        self.password = password
-        
-        self.session = self._create_session()
-
-    def _create_session(self):
-        token_url = TOKEN_URL_TEMPLATE.format(
-            server=self.server, realm=urlquote(self.realm))
-        refresh_url = token_url
-
-        client=LegacyApplicationClient(client_id=self.client_id)
-        session = OAuth2Session(client=client,
-                                auto_refresh_url=refresh_url,
-                                auto_refresh_kwargs={
-                                    'client_id': self.client_id})
-
-        token = session.fetch_token(token_url=token_url,
-                                    username=self.username,
-                                    password=self.password,
-                                    client_id=self.client_id)
-
-        return session
+        self.session = session
 
     def get_initial_access_token(self, realm_name):
         cmd_name = "get initial access token for realm '{realm}'".format(
@@ -171,9 +165,8 @@ class KeycloakConnection(object):
 
         logger.debug("%s on server %s", cmd_name, self.server)
 
-        params = {"expiration": 60, # seconds
-                  "count": 1,
-              }
+        params = {"expiration": 60,  # seconds
+                  "count": 1}
 
         response = self.session.post(url, json=params)
         logger.debug("%s response code: %s %s",
@@ -184,7 +177,7 @@ class KeycloakConnection(object):
         except ValueError as e:
             response_json = None
 
-        if (not response_json or 
+        if (not response_json or
             response.status_code != requests.codes.ok):
             logger.error("%s error: status=%s (%s) text=%s",
                          cmd_name, response.status_code, response.reason,
@@ -195,7 +188,6 @@ class KeycloakConnection(object):
         logger.debug("%s response = %s", cmd_name, json_pretty(response.text))
 
         return response_json    # ClientInitialAccessPresentation
-
 
     def get_realms(self):
         cmd_name = "get realms"
@@ -211,7 +203,7 @@ class KeycloakConnection(object):
         except ValueError as e:
             response_json = None
 
-        if (not response_json or 
+        if (not response_json or
             response.status_code != requests.codes.ok):
             logger.error("%s error: status=%s (%s) text=%s",
                          cmd_name, response.status_code, response.reason,
@@ -232,13 +224,13 @@ class KeycloakConnection(object):
         params = {"enabled": True,
                   "id": realm_name,
                   "realm": realm_name,
-              }
+                  }
 
         response = self.session.post(url, json=params)
         logger.debug("%s response code: %s %s",
                      cmd_name, response.status_code, response.reason)
 
-        if (response.status_code != requests.codes.created):
+        if response.status_code != requests.codes.created:
             logger.error("%s error: status=%s (%s) text=%s",
                          cmd_name, response.status_code, response.reason,
                          response.text)
@@ -246,7 +238,6 @@ class KeycloakConnection(object):
                 cmd=cmd_name, status=response.reason, text=response.text))
 
         logger.debug("%s response = %s", cmd_name, response.text)
-
 
     def delete_realm(self, realm_name):
         cmd_name = "delete realm '{realm}'".format(realm=realm_name)
@@ -258,7 +249,7 @@ class KeycloakConnection(object):
         logger.debug("%s response code: %s %s",
                      cmd_name, response.status_code, response.reason)
 
-        if (response.status_code != requests.codes.no_content):
+        if response.status_code != requests.codes.no_content:
             logger.error("%s error: status=%s (%s) text=%s",
                          cmd_name, response.status_code, response.reason,
                          response.text)
@@ -266,7 +257,6 @@ class KeycloakConnection(object):
                 cmd=cmd_name, status=response.reason, text=response.text))
 
         logger.debug("%s response = %s", cmd_name, response.text)
-
 
     def get_realm_metadata(self, realm_name):
         cmd_name = "get metadata for realm '{realm}'".format(realm=realm_name)
@@ -278,7 +268,7 @@ class KeycloakConnection(object):
         logger.debug("%s response code: %s %s",
                      cmd_name, response.status_code, response.reason)
 
-        if (response.status_code != requests.codes.ok):
+        if response.status_code != requests.codes.ok:
             logger.error("%s error: status=%s (%s) text=%s",
                          cmd_name, response.status_code, response.reason,
                          response.text)
@@ -287,7 +277,6 @@ class KeycloakConnection(object):
 
         logger.debug("%s response = %s", cmd_name, response.text)
         return response.text
-
 
     def get_clients(self, realm_name):
         cmd_name = "get clients in realm '{realm}'".format(realm=realm_name)
@@ -304,7 +293,7 @@ class KeycloakConnection(object):
         except ValueError as e:
             response_json = None
 
-        if (not response_json or 
+        if (not response_json or
             response.status_code != requests.codes.ok):
             logger.error("%s error: status=%s (%s) text=%s",
                          cmd_name, response.status_code, response.reason,
@@ -324,7 +313,7 @@ class KeycloakConnection(object):
 
         logger.debug("%s on server %s", cmd_name, self.server)
 
-        headers = {'Content-Type': 'application/xml;charset=utf-8'} 
+        headers = {'Content-Type': 'application/xml;charset=utf-8'}
 
         response = self.session.post(url, headers=headers, data=metadata)
         logger.debug("%s response code: %s %s",
@@ -335,7 +324,7 @@ class KeycloakConnection(object):
         except ValueError as e:
             response_json = None
 
-        if (not response_json or 
+        if (not response_json or
             response.status_code != requests.codes.ok):
             logger.error("%s error: status=%s (%s) text=%s",
                          cmd_name, response.status_code, response.reason,
@@ -346,7 +335,6 @@ class KeycloakConnection(object):
         logger.debug("%s response = %s", cmd_name, json_pretty(response.text))
 
         return response_json
-
 
     def create_client_from_descriptor(self, realm_name, descriptor):
         cmd_name = "create client from descriptor "
@@ -361,7 +349,7 @@ class KeycloakConnection(object):
         logger.debug("%s response code: %s %s",
                      cmd_name, response.status_code, response.reason)
 
-        if (response.status_code != requests.codes.created):
+        if response.status_code != requests.codes.created:
             logger.error("%s error: status=%s (%s) text=%s",
                          cmd_name, response.status_code, response.reason,
                          response.text)
@@ -370,13 +358,11 @@ class KeycloakConnection(object):
 
         logger.debug("%s response = %s", cmd_name, response.text)
 
-
     def create_client(self, realm_name, metadata):
         logger.debug("create client in realm %s on server %s",
                      realm_name, self.server)
         descriptor = self.get_client_descriptor(realm_name, metadata)
         self.create_client_from_descriptor(realm_name, descriptor)
-
 
     def register_client(self, initial_access_token, realm_name, metadata):
         cmd_name = "register_client realm '{realm}'".format(
@@ -387,7 +373,7 @@ class KeycloakConnection(object):
         logger.debug("%s on server %s", cmd_name, self.server)
 
         headers = {'Content-Type': 'application/xml;charset=utf-8',
-                   'Authorization': 'Bearer %s' % initial_access_token,} 
+                   'Authorization': 'Bearer %s' % initial_access_token}
 
         # FIXME
         response = requests.post(url, headers=headers, data=metadata)
@@ -399,7 +385,7 @@ class KeycloakConnection(object):
         except ValueError as e:
             response_json = None
 
-        if (not response_json or 
+        if (not response_json or
             response.status_code != requests.codes.created):
             logger.error("%s error: status=%s (%s) text=%s",
                          cmd_name, response.status_code, response.reason,
@@ -410,7 +396,6 @@ class KeycloakConnection(object):
         logger.debug("%s response = %s", cmd_name, json_pretty(response.text))
 
         return response_json    # ClientRepresentation
-
 
     def delete_client(self, realm_name, id):
         cmd_name = "delete client id '{id}'in realm '{realm}'".format(
@@ -424,7 +409,7 @@ class KeycloakConnection(object):
         logger.debug("%s response code: %s %s",
                      cmd_name, response.status_code, response.reason)
 
-        if (response.status_code != requests.codes.no_content):
+        if response.status_code != requests.codes.no_content:
             logger.error("%s error: status=%s (%s) text=%s",
                          cmd_name, response.status_code, response.reason,
                          response.text)
@@ -433,32 +418,87 @@ class KeycloakConnection(object):
 
         logger.debug("%s response = %s", cmd_name, response.text)
 
+# ------------------------------------------------------------------------------
 
-#-------------------------------------------------------------------------------
+
+class KeycloakAdminConnection(KeycloakREST):
+
+    def __init__(self, server, realm, client_id, username, password):
+        self.server = server
+        self.realm = realm
+        self.client_id = client_id
+        self.username = username
+        self.password = password
+
+        session = self._create_session()
+
+        super(KeycloakAdminConnection, self).__init__(server, session)
+
+    def _create_session(self):
+        token_url = TOKEN_URL_TEMPLATE.format(
+            server=self.server, realm=urlquote(self.realm))
+        refresh_url = token_url
+
+        client = LegacyApplicationClient(client_id=self.client_id)
+        session = OAuth2Session(client=client,
+                                auto_refresh_url=refresh_url,
+                                auto_refresh_kwargs={
+                                    'client_id': self.client_id})
+
+        token = session.fetch_token(token_url=token_url,
+                                    username=self.username,
+                                    password=self.password,
+                                    client_id=self.client_id)
+
+        return session
+
+
+class KeycloakNoAuthConnection(KeycloakREST):
+
+    def __init__(self, server):
+        self.server = server
+
+        session = self._create_session()
+
+        super(KeycloakNoAuthConnection, self).__init__(server, session)
+
+    def _create_session(self):
+        session = requests.Session()
+
+        return session
+
+# ------------------------------------------------------------------------------
+
 
 def do_list_realms(options, conn):
     realms = conn.get_realms()
     realm_names = get_realm_names_from_realms(realms)
     print('\n'.join(sorted(realm_names)))
 
+
 def do_create_realm(options, conn):
     conn.create_realm(options.realm_name)
+
 
 def do_delete_realm(options, conn):
     conn.delete_realm(options.realm_name)
 
+
 def do_get_realm_metadata(options, conn):
     metadata = conn.get_realm_metadata(options.realm_name)
     print(metadata)
+
 
 def do_list_clients(options, conn):
     clients = conn.get_clients(options.realm_name)
     client_ids = get_client_client_ids_from_clients(clients)
     print('\n'.join(sorted(client_ids)))
 
+
 def do_create_client(options, conn):
     metadata = options.metadata.read()
     descriptor = conn.create_client(options.realm_name, metadata)
+
 
 def do_delete_client(options, conn):
     clients = conn.get_clients(options.realm_name)
@@ -467,8 +507,7 @@ def do_delete_client(options, conn):
     conn.delete_client(options.realm_name, id)
 
 
-
-#-------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 verbose_help = '''
 
@@ -493,14 +532,15 @@ fails.
 The server should be a scheme://hostname:port URL.
 '''
 
+
 def main():
     global logger
     result = 0
 
     parser = argparse.ArgumentParser(description='Keycloak REST client',
-            prog = prog_name,
-            epilog=verbose_help.format(prog_name=prog_name),
-            formatter_class=argparse.RawDescriptionHelpFormatter)
+                    prog=prog_name,
+                    epilog=verbose_help.format(prog_name=prog_name),
+                    formatter_class=argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='be chatty')
@@ -511,12 +551,11 @@ def main():
     parser.add_argument('--show-traceback', action='store_true',
                         help='exceptions print traceback in addition to '
                              'error message')
-    
+
     parser.add_argument('--log-file',
-                        default = '/tmp/{prog_name}.log'.format(
+                        default='/tmp/{prog_name}.log'.format(
                             prog_name=prog_name),
                         help='log file pathname')
-
 
     group = parser.add_argument_group('Server')
 
@@ -527,7 +566,6 @@ def main():
     group.add_argument('-u', '--admin-username',
                        default='admin',
                        help='admin user name (default: admin)')
-
 
     group.add_argument('-p', '--admin-password',
                        required=True,
@@ -565,7 +603,7 @@ def main():
 
     # --- client commands ---
     client_parser = cmd_parsers.add_parser('client',
-                                          help='client operations')
+                                           help='client operations')
 
     sub_parser = client_parser.add_subparsers(help='client commands')
 
@@ -597,12 +635,14 @@ def main():
     options = parser.parse_args()
     configure_logging(options)
 
-    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1' # FIXME
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # FIXME
 
     try:
-        conn = KeycloakConnection(options.server, 'master', ADMIN_CLIENT_ID,
-                                  options.admin_username, options.admin_password)
-    except Exception as e: 
+        admin_conn = KeycloakAdminConnection(options.server, 'master',
+                                             ADMIN_CLIENT_ID,
+                                             options.admin_username,
+                                             options.admin_password)
+    except Exception as e:
         if options.show_traceback:
             traceback.print_exc()
         print(six.text_type(e), file=sys.stderr)
@@ -610,8 +650,8 @@ def main():
         return result
 
     try:
-        result = options.func(options, conn)
-    except Exception as e: 
+        result = options.func(options, admin_conn)
+    except Exception as e:
         if options.show_traceback:
             traceback.print_exc()
         print(six.text_type(e), file=sys.stderr)
@@ -620,10 +660,9 @@ def main():
 
     return result
 
-#-------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 if __name__ == '__main__':
     sys.exit(main())
 else:
     logger = logging.getLogger('keycloak-cli')
-    
