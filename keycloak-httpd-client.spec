@@ -3,7 +3,7 @@
 
 Name:           python-%{srcname}
 Version:        0.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        %{summary}
 
 %global git_tag RELEASE_%(r=%{version}; echo $r | tr '.' '_')
@@ -82,4 +82,3 @@ of a Keycloak server.
 %{_datadir}/python-%{srcname}/*
 
 %changelog
-
