@@ -363,6 +363,7 @@ class KeycloakREST(object):
                      realm_name, self.server)
         descriptor = self.get_client_descriptor(realm_name, metadata)
         self.create_client_from_descriptor(realm_name, descriptor)
+        return descriptor
 
     def register_client(self, initial_access_token, realm_name, metadata):
         cmd_name = "register_client realm '{realm}'".format(
@@ -372,11 +373,13 @@ class KeycloakREST(object):
 
         logger.debug("%s on server %s", cmd_name, self.server)
 
-        headers = {'Content-Type': 'application/xml;charset=utf-8',
-                   'Authorization': 'Bearer %s' % initial_access_token}
+        headers = {'Content-Type': 'application/xml;charset=utf-8'}
 
-        # FIXME
-        response = requests.post(url, headers=headers, data=metadata)
+        if initial_access_token:
+            headers['Authorization'] = 'Bearer {token}'.format(
+                token=initial_access_token)
+
+        response = self.session.post(url, headers=headers, data=metadata)
         logger.debug("%s response code: %s %s",
                      cmd_name, response.status_code, response.reason)
 
@@ -498,6 +501,12 @@ def do_list_clients(options, conn):
 def do_create_client(options, conn):
     metadata = options.metadata.read()
     descriptor = conn.create_client(options.realm_name, metadata)
+
+
+def do_register_client(options, conn):
+    metadata = options.metadata.read()
+    client_representation = conn.register_client(
+        options.initial_access_token, options.realm_name, metadata)
 
 
 def do_delete_client(options, conn):
@@ -627,6 +636,18 @@ def main():
                             help='SP metadata file or stdin')
     cmd_parser.set_defaults(func=do_create_client)
 
+    cmd_parser = sub_parser.add_parser('register',
+                                       help='register new client')
+    cmd_parser.add_argument('-r', '--realm-name', required=True,
+                            help='realm name')
+    cmd_parser.add_argument('-m', '--metadata', type=argparse.FileType('rb'),
+                            required=True,
+                            help='SP metadata file or stdin')
+    cmd_parser.add_argument('--initial-access-token', required=True,
+                            help='realm initial access token for '
+                            'client registeration')
+    cmd_parser.set_defaults(func=do_register_client)
+
     cmd_parser = sub_parser.add_parser('delete',
                                        help='delete existing client')
     cmd_parser.add_argument('-r', '--realm-name', required=True,
@@ -643,6 +664,8 @@ def main():
         os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
     try:
+        noauth_conn = KeycloakNoAuthConnection(options.server)
+
         admin_conn = KeycloakAdminConnection(options.server, 'master',
                                              ADMIN_CLIENT_ID,
                                              options.admin_username,
@@ -655,7 +678,11 @@ def main():
         return result
 
     try:
-        result = options.func(options, admin_conn)
+        if options.func == do_register_client:
+            conn = noauth_conn
+        else:
+            conn = admin_conn
+        result = options.func(options, conn)
     except Exception as e:
         if options.show_traceback:
             traceback.print_exc()
