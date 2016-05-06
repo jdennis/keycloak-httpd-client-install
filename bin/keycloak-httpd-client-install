@@ -23,6 +23,8 @@ import sys
 import tempfile
 import traceback
 
+from keycloak.keycloak_cli import RESTError
+
 from six.moves.urllib.parse import quote as urlquote
 from six.moves.urllib.parse import urlparse
 
@@ -694,6 +696,12 @@ def main():
                        required=True,
                        help='Keycloak server URL')
 
+    group.add_argument('-a', '--keycloak-auth-role',
+                       choices=keycloak_cli.AUTH_ROLES,
+                       default='root-admin',
+                       help='authenticating as what type of user '
+                       '(default: root-admin)')
+
     group.add_argument('-u', '--keycloak-admin-username', default='admin',
                        help='admin user name (default: admin)')
 
@@ -701,9 +709,18 @@ def main():
                        required=True,
                        help='admin password')
 
+    group.add_argument('--keycloak-admin-realm',
+                       default='master',
+                       help='realm admin belongs to')
+
     group.add_argument('--initial-access-token',
                        help='realm initial access token for '
                        'client registeration')
+
+    group.add_argument('--client-originate-method',
+                       choices=['descriptor', 'registration'],
+                       default='descriptor',
+                       help='select Keycloak method for creating SAML client')
 
     # ---- Argument Group "Mellon SP"  ----
 
@@ -795,6 +812,21 @@ def main():
                 mellon_http_url=options.mellon_http_url,
                 mellon_endpoint_path=options.mellon_endpoint_path))
 
+    # ===== Validate Options =====
+
+    if options.keycloak_auth_role == 'anonymous'):
+        if options.client_originate_method == 'registration':
+            raise ValueError("You cannot use client originate method "
+                             "'registration' with anonymous authentication "
+                             "because the client will need to be modified "
+                             "after registration, "
+                             "this requires admin privileges")
+                         
+        if not options.initial_access_token:
+            raise ValueError("You must supply an initial access token "
+                             "with anonymous authentication")
+
+
     # ===== Establish Keycloak Server Communication =====
 
     try:
@@ -804,14 +836,20 @@ def main():
         if options.permit_insecure_transport:
             os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
-        noauth_conn = keycloak_cli.KeycloakNoAuthConnection(
+        anonymous_conn = keycloak_cli.KeycloakAnonymousConnection(
             options.keycloak_server_url)
 
-        admin_conn = keycloak_cli.KeycloakAdminConnection(
-            options.keycloak_server_url,
-            'master',
-            keycloak_cli.ADMIN_CLIENT_ID,
-            options.keycloak_admin_username, options.keycloak_admin_password)
+        if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+            admin_conn = keycloak_cli.KeycloakAdminConnection(
+                options.keycloak_server_url,
+                options.keycloak_auth_role, 
+                options.keycloak_admin_realm,
+                keycloak_cli.ADMIN_CLIENT_ID,
+                options.keycloak_admin_username,
+                options.keycloak_admin_password)
+        else:
+            admin_conn = None
+
     except Exception as e:
         if options.show_traceback:
             traceback.print_exc()
@@ -878,53 +916,95 @@ def main():
     # ===== Configure Keycloak  =====
 
     try:
-        logger.step('Query realms from Keycloak server')
-        realms = admin_conn.get_realms()
-        realm_names = keycloak_cli.get_realm_names_from_realms(realms)
-        logger.info('existing realms [%s]', ', '.join(realm_names))
+        if options.keycloak_auth_role == 'root-admin':
+            logger.step('Query realms from Keycloak server')
+            realms = admin_conn.get_realms()
+            realm_names = keycloak_cli.get_realm_names_from_realms(realms)
+            logger.info('existing realms [%s]', ', '.join(realm_names))
 
-        if options.keycloak_realm not in realm_names:
-            logger.step('Create realm on Keycloak server')
-            logger.info('Create realm "%s"', options.keycloak_realm)
-            admin_conn.create_realm(options.keycloak_realm)
-        else:
-            logger.step('Use existing realm on Keycloak server')
-
-        if options.initial_access_token:
-            logger.step('Use provided initial access token')
-            initial_access_token = options.initial_access_token
-        else:
-            logger.step('Get new initial access token')
-            client_initial_access = admin_conn.get_initial_access_token(
-                options.keycloak_realm)
-            initial_access_token = client_initial_access['token']
-
-        logger.step('Query realm clients from Keycloak server')
-        clients = admin_conn.get_clients(options.keycloak_realm)
-        client_ids = keycloak_cli.get_client_client_ids_from_clients(clients)
-        logger.info('existing clients in realm %s = [%s]',
-                    options.keycloak_realm, ', '.join(client_ids))
-
-        if options.mellon_entity_id in client_ids:
-            if options.force:
-                logger.step('Force delete client on Keycloak server')
-                logger.info('Delete client "%s"', options.mellon_entity_id)
-                # FIXME: should this sequence be keycloak_cli delete_client_by_name method?
-                client = keycloak_cli.find_client_by_name(clients,
-                                                          options.mellon_entity_id)
-                id = client.get('id')
-                admin_conn.delete_client(options.keycloak_realm, id)
+            if options.keycloak_realm not in realm_names:
+                logger.step('Create realm on Keycloak server')
+                logger.info('Create realm "%s"', options.keycloak_realm)
+                admin_conn.create_realm(options.keycloak_realm)
             else:
-                raise AlreadyExistsError('client "{client_id}" '
-                                         'already exists in realm "{realm}". '
-                                         'Use --force to replace it.'.format(
-                                             client_id=options.mellon_entity_id,
-                                             realm=options.keycloak_realm))
+                logger.step('Use existing realm on Keycloak server')
 
-        logger.step('Creating new client')
-        logger.info('Create new client "%s"', options.mellon_entity_id)
-        noauth_conn.register_client(initial_access_token,
-                                    options.keycloak_realm, mellon_sp_metadata)
+        if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+            logger.step('Query realm clients from Keycloak server')
+            clients = admin_conn.get_clients(options.keycloak_realm)
+            client_ids = keycloak_cli.get_client_client_ids_from_clients(clients)
+            logger.info('existing clients in realm %s = [%s]',
+                        options.keycloak_realm, ', '.join(client_ids))
+
+            if options.mellon_entity_id in client_ids:
+                if options.force:
+                    logger.step('Force delete client on Keycloak server')
+                    logger.info('Delete client "%s"', options.mellon_entity_id)
+                    admin_conn.delete_client_by_name(options.keycloak_realm,
+                                                     options.mellon_entity_id)
+
+                else:
+                    raise AlreadyExistsError('client "{client_id}" '
+                                             'already exists in realm "{realm}". '
+                                             'Use --force to replace it.'.format(
+                                                 client_id=options.mellon_entity_id,
+                                                 realm=options.keycloak_realm))
+
+        if options.client_originate_method == 'descriptor':
+            logger.step('Creating new client from descriptor')
+            logger.info('Create new client "%s"', options.mellon_entity_id)
+            admin_conn.create_client(options.keycloak_realm,
+                                     mellon_sp_metadata)
+        elif options.client_originate_method == 'registration':
+
+            if options.initial_access_token:
+                logger.step('Use provided initial access token')
+                initial_access_token = options.initial_access_token
+            else:
+                if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+                    logger.step('Get new initial access token')
+                    client_initial_access = admin_conn.get_initial_access_token(
+                        options.keycloak_realm)
+                    initial_access_token = client_initial_access['token']
+                else:
+                    raise ValueError("You must root or realm admin privileges "
+                                     "to acquire an initial access token")
+
+            logger.step('Creating new client using registration service')
+            logger.info('Register new client "%s"', options.mellon_entity_id)
+
+            try:
+                anonymous_conn.register_client(initial_access_token,
+                                               options.keycloak_realm,
+                                               mellon_sp_metadata)
+            except RESTError as e:
+                if e.error_description == "Client Identifier in use":
+                    raise AlreadyExistsError('client "{client_id}" '
+                                             'already exists in realm "{realm}"'.format(
+                                                 client_id=options.mellon_entity_id,
+                                                 realm=options.keycloak_realm))
+                else:
+                    raise
+                    
+
+            if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+                # Enable Force Post Binding, registration service fails to
+                # to enable it (however creation with client descriptor does)
+                logger.step('Enable saml.force.post.binding')
+                update_attrs = {'saml.force.post.binding': True}
+                admin_conn.update_client_by_name_attributes(options.keycloak_realm,
+                                                            options.mellon_entity_id,
+                                                            update_attrs)
+            else:
+                raise ValueError("Cannot update client settings without "
+                                 "admin privileges")
+            
+
+        else:
+            raise ValueError("Unknown client-originate-method = '%s'" % 
+                             options.client_originate_method)
+
+
 
         logger.step('Retrieve IdP metadata from Keycloak server')
         idp_metadata = admin_conn.get_realm_metadata(options.keycloak_realm)
