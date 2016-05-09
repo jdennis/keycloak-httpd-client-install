@@ -14,6 +14,7 @@ from collections import namedtuple
 import os
 import pwd
 import re
+from keycloak.keycloak_cli import RESTError
 import requests
 import shutil
 import six
@@ -23,7 +24,6 @@ import sys
 import tempfile
 import traceback
 
-from keycloak.keycloak_cli import RESTError
 
 from six.moves.urllib.parse import quote as urlquote
 from six.moves.urllib.parse import urlparse
@@ -814,7 +814,7 @@ def main():
 
     # ===== Validate Options =====
 
-    if options.keycloak_auth_role == 'anonymous'):
+    if options.keycloak_auth_role == 'anonymous':
         if options.client_originate_method == 'registration':
             raise ValueError("You cannot use client originate method "
                              "'registration' with anonymous authentication "
