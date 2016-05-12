@@ -18,9 +18,13 @@ BuildRequires:  python2-devel
 BuildRequires:  python3-devel
 
 %description
-Keycloak is an authentication server. This package contains libraries and
-programs which can invoke the Keycloak REST API and configure clients
-of a Keycloak server.
+
+Keycloak is a federated Identity Provider (IdP). Apache HTTPD supports
+a variety of authentication modules which can be configured to utilize
+a Keycloak IdP to perform authentication. This package contains
+libraries and tools which can automate and simplify configuring an
+Apache HTTPD authentication module and registering as a client of a
+Keycloak IdP.
 
 %package -n python2-%{srcname}
 Summary:        %{summary}
