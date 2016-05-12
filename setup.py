@@ -2,7 +2,7 @@
 
 from distutils.core import setup
 
-name = 'keycloak-httpd-client'
+name = 'keycloak-httpd-client-install'
 
 setup(name=name,
       version='0.0',
@@ -10,7 +10,7 @@ setup(name=name,
       author='John Dennis',
       author_email='jdennis@redhat.com',
       license='GPLv3',
-      packages = ['keycloak'],
+      packages = ['keycloak_httpd_client'],
       scripts = ['bin/keycloak-httpd-client-install'],
       data_files = [('/usr/share/python-{name}/templates'.format(name=name),
                      ['templates/mellon_httpd.conf',

@@ -1,4 +1,4 @@
-#!/usr/bin/python -E
+#!/usr/bin/python
 
 from __future__ import print_function
 
@@ -7,14 +7,14 @@ import base64
 import copy
 import grp
 import jinja2
-from keycloak import keycloak_cli
+from keycloak_httpd_client import keycloak_cli
 import logging
 import logging.handlers
 from collections import namedtuple
 import os
 import pwd
 import re
-from keycloak.keycloak_cli import RESTError
+from keycloak_httpd_client.keycloak_cli import RESTError
 import requests
 import shutil
 import six

@@ -1,4 +1,4 @@
-%global srcname keycloak-httpd-client
+%global srcname keycloak-httpd-client-install
 %global summary Tools to configure Apache HTTPD as Keycloak client
 
 Name:           python-%{srcname}
@@ -9,8 +9,8 @@ Summary:        %{summary}
 %global git_tag RELEASE_%(r=%{version}; echo $r | tr '.' '_')
 
 License:        MIT
-URL:            http://pypi.python.org/pypi/%{srcname}
-Source0:        https://github.com/jdennis/python-keycloak/archive/%{git_tag}.tar.gz#/%{srcname}-%{version}.tar.gz
+URL:            https://github.com/jdennis/keycloak-httpd-client-install
+Source0:        https://github.com/jdennis/keycloak-httpd-client-install/archive/%{git_tag}.tar.gz#/%{srcname}-%{version}.tar.gz
 
 BuildArch:      noarch
 
@@ -62,7 +62,13 @@ of a Keycloak server.
 # overwritten with every setup.py install, and in general we want the
 # python3 version to be the default.
 %py2_install
+# py3_install won't overwrite files if they have a timestamp greater-than
+# or equal to the py2 installed files. If both the py2 and py3 builds execute
+# quickly the files end up with the same timestamps thus leaving the py2
+# version in the py3 install. Therefore remove any files susceptible to this.
+rm %{buildroot}/usr/bin/keycloak-httpd-client-install
 %py3_install
+echo %{buildroot}
 
 # Note that there is no %%files section for the unversioned python module if we are building for several python runtimes
 %files -n python2-%{srcname}
