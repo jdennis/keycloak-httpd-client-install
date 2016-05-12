@@ -7,9 +7,9 @@ a Keycloak IdP instance to perform authentication.
 
 Before an Apache HTTPD authentication module can utilize Keycloak a
 number of configuration steps must be performed. Most of these steps
-are done on the node running the Apache HTTPD instance. The once the
+are done on the node running the Apache HTTPD instance. Then once the
 Apache HTTPD authentication module is fully configured it must be
-registered with the Keycloak server as a client.
+registered as a client of the Keycloak IdP.
 
 This project contains both a library and an executable tool
 (keycloak-httpd-client-install) that is capable of performing the
