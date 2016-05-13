@@ -2,8 +2,8 @@
 %global summary Tools to configure Apache HTTPD as Keycloak client
 
 Name:           python-%{srcname}
-Version:        0.0
-Release:        3%{?dist}
+Version:        0.1
+Release:        1%{?dist}
 Summary:        %{summary}
 
 %global git_tag RELEASE_%(r=%{version}; echo $r | tr '.' '_')
@@ -18,7 +18,6 @@ BuildRequires:  python2-devel
 BuildRequires:  python3-devel
 
 %description
-
 Keycloak is a federated Identity Provider (IdP). Apache HTTPD supports
 a variety of authentication modules which can be configured to utilize
 a Keycloak IdP to perform authentication. This package contains
