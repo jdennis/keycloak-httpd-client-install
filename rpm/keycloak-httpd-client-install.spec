@@ -1,7 +1,11 @@
 %global srcname keycloak-httpd-client-install
 %global summary Tools to configure Apache HTTPD as Keycloak client
 
-Name:           python-%{srcname}
+%if 0%{?fedora}
+%global with_python3 1
+%endif
+
+Name:           %{srcname}
 Version:        0.1
 Release:        1%{?dist}
 Summary:        %{summary}
@@ -15,7 +19,9 @@ Source0:        https://github.com/jdennis/keycloak-httpd-client-install/archive
 BuildArch:      noarch
 
 BuildRequires:  python2-devel
+%if 0%{?with_python3}
 BuildRequires:  python3-devel
+%endif
 
 %description
 Keycloak is a federated Identity Provider (IdP). Apache HTTPD supports
@@ -39,6 +45,7 @@ Keycloak is an authentication server. This package contains libraries and
 programs which can invoke the Keycloak REST API and configure clients
 of a Keycloak server.
 
+%if 0%{?with_python3}
 %package -n python3-%{srcname}
 Summary:        %{summary}
 
@@ -53,6 +60,8 @@ Keycloak is an authentication server. This package contains libraries and
 programs which can invoke the Keycloak REST API and configure clients
 of a Keycloak server.
 
+%endif
+
 %prep
 %autosetup -n %{srcname}-%{version}
 
@@ -65,13 +74,14 @@ of a Keycloak server.
 # overwritten with every setup.py install, and in general we want the
 # python3 version to be the default.
 %py2_install
+%if 0%{?with_python3}
 # py3_install won't overwrite files if they have a timestamp greater-than
 # or equal to the py2 installed files. If both the py2 and py3 builds execute
 # quickly the files end up with the same timestamps thus leaving the py2
 # version in the py3 install. Therefore remove any files susceptible to this.
 rm %{buildroot}/usr/bin/keycloak-httpd-client-install
 %py3_install
-echo %{buildroot}
+%endif
 
 # Note that there is no %%files section for the unversioned python module if we are building for several python runtimes
 %files -n python2-%{srcname}
@@ -82,6 +92,7 @@ echo %{buildroot}
 %{_bindir}/*
 %{_datadir}/python-%{srcname}/*
 
+%if 0%{?with_python3}
 %files -n python3-%{srcname}
 %license LICENSE.txt
 %doc README.md
@@ -89,5 +100,9 @@ echo %{buildroot}
 %{python3_sitelib}/*
 %{_bindir}/*
 %{_datadir}/python-%{srcname}/*
+%endif
 
 %changelog
+* Fri May 13 2016 John Dennis <jdennis@redhat.com> - 0.1-1
+- Initial version
+
