@@ -67,7 +67,9 @@ of a Keycloak server.
 
 %build
 %py2_build
+%if 0%{?with_python3}
 %py3_build
+%endif
 
 %install
 # Must do the python2 install first because the scripts in /usr/bin are
