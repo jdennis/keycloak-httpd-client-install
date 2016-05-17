@@ -1,3 +1,4 @@
 include LICENSE.txt
 include README.md
 include doc/keycloak-httpd-client-install.md
+include doc/keycloak-httpd-client-install.8

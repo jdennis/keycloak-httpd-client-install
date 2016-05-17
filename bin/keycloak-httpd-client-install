@@ -640,7 +640,7 @@ def main():
     # ---- Common Arguments ----
 
     parser.add_argument('--no-root-check', dest='root_check',
-                        action='store_false',
+                        action='store_true',
                         help='permit running by non-root')
 
     parser.add_argument('-v', '--verbose', action='store_true',

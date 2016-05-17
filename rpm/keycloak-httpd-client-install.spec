@@ -85,11 +85,15 @@ rm %{buildroot}/usr/bin/keycloak-httpd-client-install
 %py3_install
 %endif
 
+install -d -m 755 %{buildroot}/%{_mandir}/man8
+install -c -m 644 doc/keycloak-httpd-client-install.8 %{buildroot}/%{_mandir}/man8
+
 # Note that there is no %%files section for the unversioned python module if we are building for several python runtimes
 %files -n python2-%{srcname}
 %license LICENSE.txt
 %doc README.md
 %doc doc/keycloak-httpd-client-install.md
+%doc %{_mandir}/man8/*
 %{python2_sitelib}/*
 %{_bindir}/*
 %{_datadir}/python-%{srcname}/*
