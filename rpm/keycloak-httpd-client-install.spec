@@ -6,7 +6,7 @@
 %endif
 
 Name:           %{srcname}
-Version:        0.1
+Version:        0.2
 Release:        1%{?dist}
 Summary:        %{summary}
 
@@ -109,6 +109,9 @@ install -c -m 644 doc/keycloak-httpd-client-install.8 %{buildroot}/%{_mandir}/ma
 %endif
 
 %changelog
+* Tue May 17 2016 John Dennis <jdennis@redhat.com> - 0.2-1
+- Add keycloak-httpd-client-install.8 man page
+
 * Fri May 13 2016 John Dennis <jdennis@redhat.com> - 0.1-1
 - Initial version
 
