@@ -12,7 +12,7 @@ Summary:        %{summary}
 
 %global git_tag RELEASE_%(r=%{version}; echo $r | tr '.' '_')
 
-License:        MIT
+License:        GPLv3
 URL:            https://github.com/jdennis/keycloak-httpd-client-install
 Source0:        https://github.com/jdennis/keycloak-httpd-client-install/archive/%{git_tag}.tar.gz#/%{srcname}-%{version}.tar.gz
 
@@ -81,7 +81,7 @@ of a Keycloak server.
 # or equal to the py2 installed files. If both the py2 and py3 builds execute
 # quickly the files end up with the same timestamps thus leaving the py2
 # version in the py3 install. Therefore remove any files susceptible to this.
-rm %{buildroot}/usr/bin/keycloak-httpd-client-install
+rm %{buildroot}%{_bindir}/keycloak-httpd-client-install
 %py3_install
 %endif
 
@@ -91,30 +91,30 @@ install -c -m 644 doc/keycloak-httpd-client-install.8 %{buildroot}/%{_mandir}/ma
 # Note that there is no %%files section for the unversioned python module if we are building for several python runtimes
 %files -n python2-%{srcname}
 %license LICENSE.txt
-%doc README.md
-%doc %{_mandir}/man8/*
+%doc README.md doc/ChangeLog
+%{_mandir}/man8/*
 %{python2_sitelib}/*
-%{_bindir}/*
+%{_bindir}/keycloak-httpd-client-install
 %{_datadir}/%{srcname}/*
 
 %if 0%{?with_python3}
 %files -n python3-%{srcname}
 %license LICENSE.txt
-%doc README.md
+%doc README.md doc/ChangeLog
+%{_mandir}/man8/*
 %{python3_sitelib}/*
-%{_bindir}/*
+%{_bindir}/keycloak-httpd-client-install
 %{_datadir}/%{srcname}/*
 %endif
 
 %changelog
 * Fri May 20 2016 John Dennis <jdennis@redhat.com> - 0.3-1
 - new upstream
-  replace mellon_endpoint_path with mellon_endpoint
-  update the mellon httpd conf template
+  See ChangeLog for details
 
 * Tue May 17 2016 John Dennis <jdennis@redhat.com> - 0.2-1
+- new upstream
 - Add keycloak-httpd-client-install.8 man page
 
 * Fri May 13 2016 John Dennis <jdennis@redhat.com> - 0.1-1
 - Initial version
-

@@ -1,20 +1,5 @@
 #!/usr/bin/python
 
-'''
-Get Mappers
-
-http://ipa.jdennis.oslab.test:8180/auth/admin/realms/openstack/clients/0d9098a2-ff5d-48da-8097-94095efa70ef/protocol-mappers/models
-
-http://ipa.jdennis.oslab.test:8180/auth/admin/realms/openstack/clients/0d9098a2-ff5d-48da-8097-94095efa70ef/protocol-mappers/protocol/saml
-
-ProtocolMapperRepresentation
-
-{"protocol":"saml","config":{"attribute.name":"groups","attribute.nameformat":"Basic","friendly.name"
-:"Group Membership","single":"true"},"name":"group list","protocolMapper":"saml-group-membership-mapper"
-}
-'''
-
-
 from __future__ import print_function
 
 import argparse

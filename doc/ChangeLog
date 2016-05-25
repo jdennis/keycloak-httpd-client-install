@@ -1,0 +1,21 @@
+2016-05-17  John Dennis  <jdennis@redhat.com> 0.3
+  * add --mellon-https-port option
+  * add --mellon-root option
+  * add --mellon-endpoint option
+  * add --mellon-idp-attr-name option
+  * remove --mellon-endpoint-path option, instead compute from other options
+  * allow admin password to be piped into stdin or via
+    KEYCLOAK_ADMIN_PASSWORD environment varialble
+  * fix template-dir default
+  * remove doc/keycloak-httpd-client-install.md, use man page instead
+  * add port to mellon-http-url and entity id
+  * add support for creating a client group mapper
+  * keycloak-httpd-client-install now adds group mapper
+  * add MellonIdP attribute to mellon_httpd.conf
+  * Add keycloak-httpd-client-install.8 man page
+
+2016-05-17  John Dennis  <jdennis@redhat.com> 0.2
+  * Add keycloak-httpd-client-install.8 man page
+
+2016-05-13  John Dennis  <jdennis@redhat.com> 0.1
+  * Initial version

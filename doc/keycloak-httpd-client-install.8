@@ -5,7 +5,7 @@ keycloak-httpd-client-install \-
 Tools to configure Apache HTTPD as Keycloak client
 
 .SH SYNOPSIS
-.Bkeycloak-httpd-client-install
+.B keycloak-httpd-client-install
 [\fB\-h\fR]
 [\fB\-\-no\-root\-check\fR]
 [\fB\-v\fR]
@@ -27,8 +27,11 @@ Tools to configure Apache HTTPD as Keycloak client
 [\fB\-\-mellon\-key\-file\fR \fIMELLON_KEY_FILE\fR]
 [\fB\-\-mellon\-cert\-file\fR \fIMELLON_CERT_FILE\fR]
 [\fB\-\-mellon\-hostname\fR \fIMELLON_HOSTNAME\fR]
+[\fB\-\-mellon\-https-port\fR \fIMELLON_HTTPS_PORT\fR]
+[\fB\-\-mellon\-root\fR \fIMELLON_ROOT\fR]
 [\fB\-\-mellon\-endpoint\fR \fIMELLON_ENDPOINT\fR]
 [\fB\-\-mellon\-entity\-id\fR \fIMELLON_ENTITY_ID\fR]
+[\fB\-\-mellon\-idp\-attr\-name\fR \fIMELLON_IDP_ATTR_NAME\fR]
 [\fB\-\-mellon\-organization\-name\fR \fIMELLON_ORGANIZATION_NAME\fR]
 [\fB\-\-mellon\-organization\-display\-name\fR \fIMELLON_ORGANIZATION_DISPLAY_NAME\fR]
 [\fB\-\-mellon\-organization\-url\fR \fIMELLON_ORGANIZATION_URL\fR]
@@ -140,6 +143,9 @@ Machine's fully qualified host name
 .BR \-\-mellon\-https\-port " " \fIMELLON_HTTPS_PORT\fR
 SSL/TLS port on mellon-hostname
 .TP
+.BR \-\-mellon\-root " " \fIMELLON_ROOT\fR
+Common root ancestor for all mellon endpoints
+.TP
 .BR \-\-mellon\-endpoint " " \fIMELLON_ENDPOINT\fR
 Used to form the MellonEndpointPath, e.g. 
 {mellon_root}/{mellon_endpoint}
@@ -148,6 +154,7 @@ Used to form the MellonEndpointPath, e.g.
 .BR \-\-mellon\-entity\-id " " \fIMELLON_ENTITY_ID\fR
 SP SAML Entity ID
 (default: {mellon_http_url}/{mellon_root}/{mellon_endpoint_path}/metadata)
+.TP
 .BR \-\-mellon\-idp\-attr\-name " " \fIMELLON_IDP_ATTR_NAME\fR
 Name of the attribute Mellon adds which will contain the IdP entity id
 (default: {mellon_http_url}/{mellon_root}/{mellon_endpoint_path}/metadata)
@@ -188,7 +195,7 @@ The tool is capable of range of configuration steps. But the extent of those ope
 Selecting which authencation role will be used is determined by a combination of the \fB\-\-keycloak\-auth\-role\fR option and the \fB\-\-keycloak\-admin\-realm\fR option. When the authentication role is one of \fIroot\-admin\fR or \fIrealm\-admin\fR the tool will authenticate as a user in a specific realm, the \fB\-\-keycloak\-admin\-realm\fR option declares the realm the administrator will authenticate to. For the \fIroot\-admin\fR role this is typically the \fImaster\fR realm. For the \fIrealm\-admin\fR role this would be realm the tool is registrating the client in.
 
 .PP
-.BDetermining which authentication role to use
+.B Determining which authentication role to use
 
 In general the principle of \fIleast privilige\fR should apply. Grant to the tool the least privilige necessary to perform the required action. In oder of least privilige to greatest privilige the following operations are possible under the defined authentication roles:
 
@@ -322,8 +329,31 @@ Requires either the \fIroot\-admin\fR or \fIrealm\-admin\fR auth role.
 .PP
 The Mellon SP is registered with the Keycloak realm on the Keycloak server by sending the Keycloak server the Mellon SP metadata to the Keycloak server.
 .PP
-BWhen the client\-originate\-method is \fIdescriptor\fR either the \fIroot\-admin\fR or \fIrealm\-admin\fR auth role is required. When the \fIclient\-originate\-method\fR is \fIregistration\fR the initial access token is mandatory for the \fIanonymous\fR auth role and optional for the \fIroot\-admin\fR or \fIrealm\-admin\fR roles.
+When the client\-originate\-method is \fIdescriptor\fR either the \fIroot\-admin\fR or \fIrealm\-admin\fR auth role is required. When the \fIclient\-originate\-method\fR is \fIregistration\fR the initial access token is mandatory for the \fIanonymous\fR auth role and optional for the \fIroot\-admin\fR or \fIrealm\-admin\fR roles.
 .RE
+
+.PP
+\fB*\fR Adjust client configuration
+.RS
+.PP
+Override default Keycloak client values. This varies by Keycloak release.
+.PP
+Requires either the \fIroot\-admin\fR or \fIrealm\-admin\fR auth role.
+.RE
+
+.PP
+\fB*\fR Add attributes to be returned in assertion
+.RS
+.PP
+The client is configured to return necessary attributes. The added attributes are:
+.RS
+.PP
+\fB*\fR Groups user is a member of.
+.RE
+.PP
+Requires either the \fIroot\-admin\fR or \fIrealm\-admin\fR auth role.
+.RE
+
 .PP
 \fB*\fR Retrieve IdP metadata from Keycloak server.
 .RS
