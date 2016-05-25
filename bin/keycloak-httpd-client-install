@@ -5,6 +5,7 @@ from __future__ import print_function
 import argparse
 import base64
 import copy
+import getpass
 import grp
 import jinja2
 from keycloak_httpd_client import keycloak_cli
@@ -614,7 +615,7 @@ def build_mellon_sp_metadata_file(options):
 # ------------ Argparse Argument Conversion/Validation Functions --------------
 
 
-def arg_type_mellon_endpoint_path(value):
+def arg_type_mellon_endpoint(value):
     value = value.strip(' /')
     return value
 
@@ -640,7 +641,7 @@ def main():
     # ---- Common Arguments ----
 
     parser.add_argument('--no-root-check', dest='root_check',
-                        action='store_true',
+                        action='store_false',
                         help='permit running by non-root')
 
     parser.add_argument('-v', '--verbose', action='store_true',
@@ -676,7 +677,7 @@ def main():
 
     group.add_argument('--template-dir',
                        default=('/usr/share/'
-                                'python-keycloak-httpd-client/templates'.
+                                'keycloak-httpd-client-install/templates'.
                                 format(prog_name=prog_name)),
                        help='Template location')
 
@@ -706,8 +707,7 @@ def main():
                        help='admin user name (default: admin)')
 
     group.add_argument('-p', '--keycloak-admin-password',
-                       required=True,
-                       help='admin password')
+                       help='admin password (use - to read from stdin)')
 
     group.add_argument('--keycloak-admin-realm',
                        default='master',
@@ -735,18 +735,23 @@ def main():
     group.add_argument('--mellon-hostname', default=socket.getfqdn(),
                        help="Machine's fully qualified host name")
 
-    group.add_argument('--mellon-endpoint-path', default='/mellon/',
-                       type=arg_type_mellon_endpoint_path,
-                       help='The root directory of the SAML2 endpoints, '
-                            'relative to the root of the web server. '
-                            'mod_auth_mellon will handle SAML requests to '
-                            'https://{mellon_hostname}/'
-                            '{mellon-endpoint-path}/*. '
-                            'The path you specify must be contained within '
-                            'the current Location directive.')
+    group.add_argument('--mellon-https-port', default=443, type=int,
+                       help="SSL/TLS port on mellon-hostname")
+
+    group.add_argument('--mellon-root', default='/',
+                       help='common root ancestor for all mellon endpoints')
+
+    group.add_argument('--mellon-endpoint', default='mellon',
+                       type=arg_type_mellon_endpoint,
+                       help='Used to form the MellonEndpointPath, e.g. '
+                       '{mellon_root}/{mellon_endpoint}.')
 
     group.add_argument('--mellon-entity-id',
                        help='SP SAML Entity ID')
+
+    group.add_argument('--mellon-idp-attr-name', default='IDP',
+                       help='name of the attribute Mellon adds which will '
+                       'contain the IdP entity id')
 
     group.add_argument('--mellon-organization-name',
                        help='Add SAML OrganizationName to SP metadata')
@@ -777,6 +782,31 @@ def main():
 
     configure_logging(options)
 
+    # ===== Options requiring special handling =====
+
+    if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+        if options.keycloak_admin_password is None:
+            if (('KEYCLOAK_ADMIN_PASSWORD' in os.environ) and 
+                (os.environ['KEYCLOAK_ADMIN_PASSWORD'])):
+                options.keycloak_admin_password = (
+                    os.environ['KEYCLOAK_ADMIN_PASSWORD'])
+            else:
+                options.keycloak_admin_password = getpass.getpass(
+                    '%s password: ' % (options.keycloak_admin_username))
+        elif options.keycloak_admin_password == '-':
+            options.keycloak_admin_password = sys.stdin.readline().rstrip('\n')
+
+        if not options.keycloak_admin_password:
+            parser.error('argument %s is required '
+                         'unless passed in the environment '
+                         'variable KEYCLOAK_ADMIN_PASSWORD' %
+                         ('keycloak-admin-password'))
+
+    # ===== Normalize Options =====
+
+    options.mellon_root = '/' + options.mellon_root.strip(' /')
+    options.mellon_endpoint = options.mellon_endpoint.strip(' /')
+
     # ===== Synthesize Derived Options =====
 
     options.httpd_saml_dir = os.path.join(options.httpd_dir, HTTPD_SAML_DIR)
@@ -804,11 +834,17 @@ def main():
                          app_name=options.app_name,
                          realm=options.keycloak_realm))
     options.mellon_http_url = \
-        'https://{mellon_hostname}'.format(
-            mellon_hostname=options.mellon_hostname)
+        'https://{mellon_hostname}:{mellon_https_port}'.format(
+            mellon_hostname=options.mellon_hostname,
+            mellon_https_port=options.mellon_https_port)
+
+    options.mellon_endpoint_path = '{mellon_root}/{mellon_endpoint}'.format(
+        mellon_root=options.mellon_root,
+        mellon_endpoint=options.mellon_endpoint)
+
     if not options.mellon_entity_id:
         options.mellon_entity_id = (
-            '{mellon_http_url}/{mellon_endpoint_path}/metadata'.format(
+            '{mellon_http_url}{mellon_endpoint_path}/metadata'.format(
                 mellon_http_url=options.mellon_http_url,
                 mellon_endpoint_path=options.mellon_endpoint_path))
 
@@ -995,6 +1031,15 @@ def main():
                 admin_conn.update_client_by_name_attributes(options.keycloak_realm,
                                                             options.mellon_entity_id,
                                                             update_attrs)
+
+                logger.step('Add group attribute mapper to client')
+                mapper = admin_conn.new_saml_group_protocol_mapper(
+                    'group list', 'groups',
+                    friendly_name='List of groups user is a member of')
+                admin_conn.create_client_by_name_protocol_mapper(options.keycloak_realm,
+                                                                 options.mellon_entity_id,
+                                                                 mapper)
+
             else:
                 raise ValueError("Cannot update client settings without "
                                  "admin privileges")

@@ -23,24 +23,24 @@
    </KeyDescriptor>
    <SingleLogoutService
      Binding="urn:oasis:names:tc:SAML:2.0:bindings:SOAP"
-     Location="{{ mellon_http_url }}/{{ mellon_endpoint_path }}/logout" />
+     Location="{{ mellon_http_url }}{{ mellon_endpoint_path }}/logout" />
    <SingleLogoutService
      Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
-     Location="{{ mellon_http_url }}/{{ mellon_endpoint_path }}/logout" />
+     Location="{{ mellon_http_url }}{{ mellon_endpoint_path }}/logout" />
    <NameIDFormat>urn:oasis:names:tc:SAML:2.0:nameid-format:transient</NameIDFormat>
    <AssertionConsumerService
      index="0"
      isDefault="true"
      Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
-     Location="{{ mellon_http_url }}/{{ mellon_endpoint_path }}/postResponse" />
+     Location="{{ mellon_http_url }}{{ mellon_endpoint_path }}/postResponse" />
    <AssertionConsumerService
      index="1"
      Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Artifact"
-     Location="{{ mellon_http_url }}/{{ mellon_endpoint_path }}/artifactResponse" />
+     Location="{{ mellon_http_url }}{{ mellon_endpoint_path }}/artifactResponse" />
    <AssertionConsumerService
      index="2"
      Binding="urn:oasis:names:tc:SAML:2.0:bindings:PAOS"
-     Location="{{ mellon_http_url }}/{{ mellon_endpoint_path }}/paosResponse" />
+     Location="{{ mellon_http_url }}{{ mellon_endpoint_path }}/paosResponse" />
  </SPSSODescriptor>
   {% if mellon_organization_name or mellon_organization_display_name or mellon_organization_url %}
   <Organization>

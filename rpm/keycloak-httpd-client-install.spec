@@ -6,7 +6,7 @@
 %endif
 
 Name:           %{srcname}
-Version:        0.2
+Version:        0.3
 Release:        1%{?dist}
 Summary:        %{summary}
 
@@ -92,23 +92,26 @@ install -c -m 644 doc/keycloak-httpd-client-install.8 %{buildroot}/%{_mandir}/ma
 %files -n python2-%{srcname}
 %license LICENSE.txt
 %doc README.md
-%doc doc/keycloak-httpd-client-install.md
 %doc %{_mandir}/man8/*
 %{python2_sitelib}/*
 %{_bindir}/*
-%{_datadir}/python-%{srcname}/*
+%{_datadir}/%{srcname}/*
 
 %if 0%{?with_python3}
 %files -n python3-%{srcname}
 %license LICENSE.txt
 %doc README.md
-%doc doc/keycloak-httpd-client-install.md
 %{python3_sitelib}/*
 %{_bindir}/*
-%{_datadir}/python-%{srcname}/*
+%{_datadir}/%{srcname}/*
 %endif
 
 %changelog
+* Fri May 20 2016 John Dennis <jdennis@redhat.com> - 0.3-1
+- new upstream
+  replace mellon_endpoint_path with mellon_endpoint
+  update the mellon httpd conf template
+
 * Tue May 17 2016 John Dennis <jdennis@redhat.com> - 0.2-1
 - Add keycloak-httpd-client-install.8 man page
 

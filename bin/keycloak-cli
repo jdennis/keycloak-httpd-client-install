@@ -2,6 +2,6 @@
 
 import sys
 
-from keycloak.keycloak_cli import main
+from keycloak_httpd_client.keycloak_cli import main
 
 sys.exit(main())

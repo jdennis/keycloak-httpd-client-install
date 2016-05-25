@@ -5,14 +5,15 @@ from distutils.core import setup
 name = 'keycloak-httpd-client-install'
 
 setup(name=name,
-      version='0.2',
+      version='0.3',
       description='Tools to configure Apache HTTPD as Keycloak client',
       author='John Dennis',
       author_email='jdennis@redhat.com',
+      url='https://github.com/jdennis/keycloak-httpd-client-install',
       license='GPLv3',
       packages = ['keycloak_httpd_client'],
       scripts = ['bin/keycloak-httpd-client-install'],
-      data_files = [('/usr/share/python-{name}/templates'.format(name=name),
+      data_files = [('/usr/share/{name}/templates'.format(name=name),
                      ['templates/mellon_httpd.conf',
                       'templates/sp_metadata.tpl'])],
       requires = ['requests', 'requests_oauthlib', 'jinja2'],

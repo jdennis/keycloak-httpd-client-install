@@ -1,5 +1,20 @@
 #!/usr/bin/python
 
+'''
+Get Mappers
+
+http://ipa.jdennis.oslab.test:8180/auth/admin/realms/openstack/clients/0d9098a2-ff5d-48da-8097-94095efa70ef/protocol-mappers/models
+
+http://ipa.jdennis.oslab.test:8180/auth/admin/realms/openstack/clients/0d9098a2-ff5d-48da-8097-94095efa70ef/protocol-mappers/protocol/saml
+
+ProtocolMapperRepresentation
+
+{"protocol":"saml","config":{"attribute.name":"groups","attribute.nameformat":"Basic","friendly.name"
+:"Group Membership","single":"true"},"name":"group list","protocolMapper":"saml-group-membership-mapper"
+}
+'''
+
+
 from __future__ import print_function
 
 import argparse
@@ -53,6 +68,15 @@ GET_INITIAL_ACCESS_TOKEN_TEMPLATE = (
 SAML2_CLIENT_REGISTRATION_TEMPLATE = (
   '{server}/auth/realms/{realm}/clients-registrations/saml2-entity-descriptor')
 
+GET_CLIENT_PROTOCOL_MAPPERS_TEMPLATE = (
+    '{server}/auth/admin/realms/{realm}/clients/{id}/protocol-mappers/models')
+GET_CLIENT_PROTOCOL_MAPPERS_BY_PROTOCOL_TEMPLATE = (
+    '{server}/auth/admin/realms/{realm}/clients/{id}/protocol-mappers/protocol/{protocol}')
+
+POST_CLIENT_PROTOCOL_MAPPER_TEMPLATE = (
+    '{server}/auth/admin/realms/{realm}/clients/{id}/protocol-mappers/models')
+
+
 ADMIN_CLIENT_ID = 'admin-cli'
 
 # ------------------------------------------------------------------------------
@@ -75,6 +99,8 @@ class RESTError(StandardError):
 
         if response_json:
             self.error_description = response_json.get('error_description')
+            if self.error_description is None:
+                self.error_description = response_json.get('errorMessage')
             self.error = response_json.get('error')
             self.message += '"{error_description}" [{error}]'.format(
                 error_description=self.error_description,
@@ -539,7 +565,7 @@ class KeycloakREST(object):
     def update_client(self, realm_name, client):
         id = client['id']
         cmd_name = "update client {id} in realm '{realm}'".format(
-            id=id, realm=realm_name)
+            id=client['clientId'], realm=realm_name)
         url = PUT_CLIENT_URL_TEMPLATE.format(
             server=self.server, realm=urlquote(realm_name),
             id=urlquote(id))
@@ -580,6 +606,62 @@ class KeycloakREST(object):
                                          update_attrs):
         client = self.get_client_by_name(realm_name, client_name)
         self.update_client_attributes(realm_name, client, update_attrs)
+
+    def new_saml_group_protocol_mapper(self, mapper_name, attribute_name,
+                                       friendly_name=None,
+                                       single_attribute=True):
+        mapper = {
+            'protocol': 'saml',
+            'name': mapper_name,
+            'protocolMapper': 'saml-group-membership-mapper',
+            'config': {
+                'attribute.name': attribute_name,
+                'attribute.nameformat': 'Basic',
+                'single': single_attribute,
+                'full.path': False,
+            },
+        }
+
+        if friendly_name:
+            mapper['config']['friendly.name'] = friendly_name
+                
+        return mapper
+
+    def create_client_protocol_mapper(self, realm_name, client, mapper):
+        id = client['id']
+        cmd_name = ("create protocol-mapper '{mapper_name}' for client {id} "
+                    "in realm '{realm}'".format(
+                        mapper_name=mapper['name'],id=client['clientId'], realm=realm_name))
+        url = POST_CLIENT_PROTOCOL_MAPPER_TEMPLATE.format(
+            server=self.server,
+            realm=urlquote(realm_name),
+            id=urlquote(id))
+
+        logger.debug("%s on server %s", cmd_name, self.server)
+
+        response = self.session.post(url, json=mapper)
+        logger.debug("%s response code: %s %s",
+                     cmd_name, response.status_code, response.reason)
+
+        try:
+            response_json = response.json()
+        except ValueError as e:
+            response_json = None
+
+        if response.status_code != requests.codes.created:
+            logger.error("%s error: status=%s (%s) text=%s",
+                         cmd_name, response.status_code, response.reason,
+                         response.text)
+            raise RESTError(response.status_code, response.reason,
+                            response_json, response.text, cmd_name)
+
+        logger.debug("%s response = %s", cmd_name, response.text)
+
+
+    def create_client_by_name_protocol_mapper(self, realm_name, client_name,
+                                              mapper):
+        client = self.get_client_by_name(realm_name, client_name)
+        self.create_client_protocol_mapper(realm_name, client, mapper)
 
 # ------------------------------------------------------------------------------
 
@@ -672,11 +754,13 @@ def do_delete_client(options, conn):
 
 def do_client_test(options, conn):
     'experimental test code used during development'
-    update_attrs = {'saml.force.post.binding': False}
-    conn.update_client_by_name_attributes(options.realm_name,
-                                          options.client_name,
-                                          update_attrs)
+
+    mapper = conn.new_saml_group_protocol_mapper('Foo Groups', 'foo_groups',
+                                       friendly_name='A Foo Group Mapper')
+
     client = conn.get_client_by_name(options.realm_name, options.client_name)
+
+    conn.create_client_protocol_mapper(options.realm_name, client, mapper)
 
 
 # ------------------------------------------------------------------------------

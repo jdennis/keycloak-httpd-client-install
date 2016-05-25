@@ -27,7 +27,7 @@ Tools to configure Apache HTTPD as Keycloak client
 [\fB\-\-mellon\-key\-file\fR \fIMELLON_KEY_FILE\fR]
 [\fB\-\-mellon\-cert\-file\fR \fIMELLON_CERT_FILE\fR]
 [\fB\-\-mellon\-hostname\fR \fIMELLON_HOSTNAME\fR]
-[\fB\-\-mellon\-endpoint\-path\fR \fIMELLON_ENDPOINT_PATH\fR]
+[\fB\-\-mellon\-endpoint\fR \fIMELLON_ENDPOINT\fR]
 [\fB\-\-mellon\-entity\-id\fR \fIMELLON_ENTITY_ID\fR]
 [\fB\-\-mellon\-organization\-name\fR \fIMELLON_ORGANIZATION_NAME\fR]
 [\fB\-\-mellon\-organization\-display\-name\fR \fIMELLON_ORGANIZATION_DISPLAY_NAME\fR]
@@ -42,30 +42,37 @@ Configure mod_auth_mellon as Keycloak client
 show this help message and exit
 .TP
 .BR \-\-no\-root\-check
-permit running by non\-root (default: False)
+permit running by non\-root
+(default: False)
 .TP
 .BR \-v ", " \-\-verbose
-be chatty (default: False)
+be chatty
+(default: False)
 .TP
 .BR \-d ", " \-\-debug
-turn on debug info (default: False)
+turn on debug info
+(default: False)
 .TP
 .BR \-\-show\-traceback
-exceptions print traceback in addition to error message (default: False)
+exceptions print traceback in addition to error message
+(default: False)
 .TP
 .BR \-\-log\-file " " \fILOG_FILE\fR
 log file pathname
 (default: /var/log/python\-keycloak\-httpd\-client/keycloak\-httpd\-client\-install.log)
 .TP
 .BR \-\-app\-name " " \fIAPP_NAME\fR
-name of the web app being protected by mellon (default: None)
+name of the web app being protected by mellon
+(default: None)
 .TP
 .BR  \-\-force
-forcefully override safety checks (default: False)
+forcefully override safety checks
+(default: False)
 .TP
 .BR \-\-permit\-insecure\-transport
 Normally secure transport such as TLS is required,
-defeat this check (default: False)
+defeat this check
+(default: False)
 
 .PP
 Program Configuration:
@@ -73,33 +80,39 @@ Program Configuration:
 .TP
 .BR \-\-template\-dir " " \fITEMPLATE_DIR\fR
 Template location
-(default: /usr/share/python\-keycloak\-httpd\-client/templates)
+(default: /usr/share/keycloak\-httpd\-client/templates)
 .TP
 .BR \-\-httpd\-dir " " \fIHTTPD_DIR\fR
-Template location (default: /etc/httpd)
+Template location
+(default: /etc/httpd)
 
 .PP
 Keycloak IdP:
 
 .TP
 .BR \-r ", " \-\-keycloak\-realm " " \fIKEYCLOAK_REALM\fR
-realm name (default: None)
+realm name
+(default: None)
 .TP
 .BR \-s ", " \-\-keycloak\-server\-url " " \fIKEYCLOAK_SERVER_URL\fR
-Keycloak server URL (default: None)
+Keycloak server URL
+(default: None)
 .TP
 .BR \-a ", " \-\-keycloak\-auth\-role " " \fIroot\-admin|realm\-admin|anonymous\fR
 authenticating as what type of user
 (default: root\-admin)
 .TP
 .BR \-u ", " \-\-keycloak\-admin\-username " " \fIKEYCLOAK_ADMIN_USERNAME\fR
-admin user name (default: admin)
+admin user name
+(default: admin)
 .TP
 .BR \-p ", " \-\-keycloak\-admin\-password " " \fIKEYCLOAK_ADMIN_PASSWORD\fR
-admin password (default: None)
+admin password (use - to read from stdin)
+(default: None)
 .TP
 .BR \-\-keycloak\-admin\-realm " " \fIKEYCLOAK_ADMIN_REALM\fR
-realm admin belongs to (default: master)
+realm admin belongs to
+(default: master)
 .TP
 .BR \-\-initial\-access\-token " " \fIINITIAL_ACCESS_TOKEN\fR
 realm initial access token for client registeration
@@ -124,16 +137,20 @@ certficate file
 .BR \-\-mellon\-hostname " " \fIMELLON_HOSTNAME\fR
 Machine's fully qualified host name
 .TP
-.BR \-\-mellon\-endpoint\-path " " \fIMELLON_ENDPOINT_PATH\fR
-The root directory of the SAML2 endpoints, relative to the root of the
-web server. mod_auth_mellon will handle SAML requests to
-https://{mellon_hostname }/{mellon\-endpoint\-path}/*. The path you
-specify must be contained within the current Location directive.
-(default: /mellon/)
+.BR \-\-mellon\-https\-port " " \fIMELLON_HTTPS_PORT\fR
+SSL/TLS port on mellon-hostname
+.TP
+.BR \-\-mellon\-endpoint " " \fIMELLON_ENDPOINT\fR
+Used to form the MellonEndpointPath, e.g. 
+{mellon_root}/{mellon_endpoint}
+(default: mellon)
 .TP
 .BR \-\-mellon\-entity\-id " " \fIMELLON_ENTITY_ID\fR
 SP SAML Entity ID
-(default: {mellon_http_url}/{mellon_endpoint_path}/metadata)
+(default: {mellon_http_url}/{mellon_root}/{mellon_endpoint_path}/metadata)
+.BR \-\-mellon\-idp\-attr\-name " " \fIMELLON_IDP_ATTR_NAME\fR
+Name of the attribute Mellon adds which will contain the IdP entity id
+(default: {mellon_http_url}/{mellon_root}/{mellon_endpoint_path}/metadata)
 .TP
 .BR \-\-mellon\-organization\-name " " \fIMELLON_ORGANIZATION_NAME\fR
 Add SAML OrganizationName to SP metadata
@@ -324,7 +341,9 @@ Within the web application you may protect via SAML multiple independent web res
 .nf
 .RS
 <Location>
+    AuthType Mellon
     MellonEnable auth
+    Require valid-user
 </Location>
 .RE
 .fi
