@@ -23,6 +23,8 @@ BuildRequires:  python2-devel
 BuildRequires:  python3-devel
 %endif
 
+Requires:       %{_bindir}/keycloak-httpd-client-install
+
 %description
 Keycloak is a federated Identity Provider (IdP). Apache HTTPD supports
 a variety of authentication modules which can be configured to utilize
@@ -31,14 +33,22 @@ libraries and tools which can automate and simplify configuring an
 Apache HTTPD authentication module and registering as a client of a
 Keycloak IdP.
 
+%files
+%license LICENSE.txt
+%doc README.md doc/ChangeLog
+%{_mandir}/man8/*
+%{_datadir}/%{srcname}/*
+
 %package -n python2-%{srcname}
 Summary:        %{summary}
 
 %{?python_provide:%python_provide python2-%{srcname}}
 
+Requires:       %{name} = %{version}-%{release}
 Requires:       python-requests
 Requires:       python-requests-oauthlib
 Requires:       python-jinja2
+Requires:       %{_bindir}/keycloak-httpd-client-install
 
 %description -n python2-%{srcname}
 Keycloak is an authentication server. This package contains libraries and
@@ -51,6 +61,7 @@ Summary:        %{summary}
 
 %{?python_provide:%python_provide python3-%{srcname}}
 
+Requires:       %{name} = %{version}-%{release}
 Requires:       python3-requests
 Requires:       python3-requests-oauthlib
 Requires:       python3-jinja2
@@ -90,21 +101,15 @@ install -c -m 644 doc/keycloak-httpd-client-install.8 %{buildroot}/%{_mandir}/ma
 
 # Note that there is no %%files section for the unversioned python module if we are building for several python runtimes
 %files -n python2-%{srcname}
-%license LICENSE.txt
-%doc README.md doc/ChangeLog
-%{_mandir}/man8/*
 %{python2_sitelib}/*
+%if ! 0%{?with_python3}
 %{_bindir}/keycloak-httpd-client-install
-%{_datadir}/%{srcname}/*
+%endif
 
 %if 0%{?with_python3}
 %files -n python3-%{srcname}
-%license LICENSE.txt
-%doc README.md doc/ChangeLog
-%{_mandir}/man8/*
 %{python3_sitelib}/*
 %{_bindir}/keycloak-httpd-client-install
-%{_datadir}/%{srcname}/*
 %endif
 
 %changelog

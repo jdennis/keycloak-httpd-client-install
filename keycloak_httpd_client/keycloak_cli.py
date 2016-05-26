@@ -67,7 +67,7 @@ ADMIN_CLIENT_ID = 'admin-cli'
 # ------------------------------------------------------------------------------
 
 
-class RESTError(StandardError):
+class RESTError(Exception):
     def __init__(self, status_code, status_reason,
                  response_json, response_text, cmd):
         self.status_code = status_code
@@ -585,7 +585,7 @@ class KeycloakREST(object):
         logger.debug("update client attrs: client_id=%s "
         "new attrs=%s" % (client_id, client['attributes']))
         self.update_client(realm_name, client);
-        
+
 
     def update_client_by_name_attributes(self, realm_name, client_name,
                                          update_attrs):
@@ -609,7 +609,7 @@ class KeycloakREST(object):
 
         if friendly_name:
             mapper['config']['friendly.name'] = friendly_name
-                
+
         return mapper
 
     def create_client_protocol_mapper(self, realm_name, client, mapper):
