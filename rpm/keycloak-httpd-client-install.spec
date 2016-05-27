@@ -97,6 +97,7 @@ install -c -m 644 doc/keycloak-httpd-client-install.8 %{buildroot}/%{_mandir}/ma
 %license LICENSE.txt
 %doc README.md doc/ChangeLog
 %dir %{_datadir}/%{srcname}
+%dir %{_datadir}/%{srcname}/templates
 %{_datadir}/%{srcname}/*
 
 # Note that there is no %%files section for the unversioned python module if we are building for several python runtimes
