@@ -33,11 +33,6 @@ libraries and tools which can automate and simplify configuring an
 Apache HTTPD authentication module and registering as a client of a
 Keycloak IdP.
 
-%files
-%license LICENSE.txt
-%doc README.md doc/ChangeLog
-%{_datadir}/%{srcname}/*
-
 %package -n python2-%{srcname}
 Summary:        %{summary}
 
@@ -97,6 +92,12 @@ rm %{buildroot}%{_bindir}/keycloak-httpd-client-install
 
 install -d -m 755 %{buildroot}/%{_mandir}/man8
 install -c -m 644 doc/keycloak-httpd-client-install.8 %{buildroot}/%{_mandir}/man8
+
+%files
+%license LICENSE.txt
+%doc README.md doc/ChangeLog
+%dir %{_datadir}/%{srcname}
+%{_datadir}/%{srcname}/*
 
 # Note that there is no %%files section for the unversioned python module if we are building for several python runtimes
 %files -n python2-%{srcname}
