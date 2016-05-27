@@ -36,7 +36,6 @@ Keycloak IdP.
 %files
 %license LICENSE.txt
 %doc README.md doc/ChangeLog
-%{_mandir}/man8/*
 %{_datadir}/%{srcname}/*
 
 %package -n python2-%{srcname}
@@ -104,12 +103,14 @@ install -c -m 644 doc/keycloak-httpd-client-install.8 %{buildroot}/%{_mandir}/ma
 %{python2_sitelib}/*
 %if ! 0%{?with_python3}
 %{_bindir}/keycloak-httpd-client-install
+%{_mandir}/man8/*
 %endif
 
 %if 0%{?with_python3}
 %files -n python3-%{srcname}
 %{python3_sitelib}/*
 %{_bindir}/keycloak-httpd-client-install
+%{_mandir}/man8/*
 %endif
 
 %changelog
