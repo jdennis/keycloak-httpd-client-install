@@ -1,3 +1,10 @@
+2016-06-07  John Dennis  <jdennis@redhat.com> 0.4
+  * add methods to add/remove client redirect URI
+  * add function to parse SP metadata to extract
+    AssertionConsumerServiceURL's
+  * Add all AssertionConsumerServiceURL's as redirect URI's during
+    client registration.
+
 2016-05-17  John Dennis  <jdennis@redhat.com> 0.3
   * add --mellon-https-port option
   * add --mellon-root option

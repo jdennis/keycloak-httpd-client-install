@@ -35,16 +35,14 @@ DELETE_REALM_URL_TEMPLATE = (
 GET_REALM_METADATA_TEMPLATE = (
     '{server}/auth/realms/{realm}/protocol/saml/descriptor')
 
+CLIENT_REPRESENTATION_TEMPLATE = (
+    '{server}/auth/admin/realms/{realm}/clients/{id}')
 GET_CLIENTS_URL_TEMPLATE = (
     '{server}/auth/admin/realms/{realm}/clients')
-PUT_CLIENT_URL_TEMPLATE = (
-    '{server}/auth/admin/realms/{realm}/clients/{id}')
 CLIENT_DESCRIPTOR_URL_TEMPLATE = (
     '{server}/auth/admin/realms/{realm}/client-description-converter')
 CREATE_CLIENT_URL_TEMPLATE = (
     '{server}/auth/admin/realms/{realm}/clients')
-DELETE_CLIENT_URL_TEMPLATE = (
-    '{server}/auth/admin/realms/{realm}/clients/{id}')
 
 GET_INITIAL_ACCESS_TOKEN_TEMPLATE = (
     '{server}/auth/admin/realms/{realm}/clients-initial-access')
@@ -522,7 +520,7 @@ class KeycloakREST(object):
     def delete_client_by_id(self, realm_name, id):
         cmd_name = "delete client id '{id}'in realm '{realm}'".format(
             id=id, realm=realm_name)
-        url = DELETE_CLIENT_URL_TEMPLATE.format(
+        url = CLIENT_REPRESENTATION_TEMPLATE.format(
             server=self.server, realm=urlquote(realm_name),
             id=urlquote(id))
 
@@ -549,7 +547,7 @@ class KeycloakREST(object):
         id = client['id']
         cmd_name = "update client {id} in realm '{realm}'".format(
             id=client['clientId'], realm=realm_name)
-        url = PUT_CLIENT_URL_TEMPLATE.format(
+        url = CLIENT_REPRESENTATION_TEMPLATE.format(
             server=self.server, realm=urlquote(realm_name),
             id=urlquote(id))
 
@@ -646,6 +644,28 @@ class KeycloakREST(object):
         client = self.get_client_by_name(realm_name, client_name)
         self.create_client_protocol_mapper(realm_name, client, mapper)
 
+
+
+    def add_client_by_name_redirect_uris(self, realm_name, client_name, uris):
+        client = self.get_client_by_name(realm_name, client_name)
+
+        uris = set(uris)
+        redirect_uris = set(client['redirectUris'])
+        redirect_uris |= uris
+        client['redirectUris'] = list(redirect_uris)
+        self.update_client(realm_name, client);
+
+    def remove_client_by_name_redirect_uris(self, realm_name, client_name, uris):
+        client = self.get_client_by_name(realm_name, client_name)
+
+        uris = set(uris)
+        redirect_uris = set(client['redirectUris'])
+        redirect_uris -= uris
+        client['redirectUris'] = list(redirect_uris)
+
+        self.update_client(realm_name, client);
+
+
 # ------------------------------------------------------------------------------
 
 
@@ -738,13 +758,11 @@ def do_delete_client(options, conn):
 def do_client_test(options, conn):
     'experimental test code used during development'
 
-    mapper = conn.new_saml_group_protocol_mapper('Foo Groups', 'foo_groups',
-                                       friendly_name='A Foo Group Mapper')
+    uri = 'https://openstack.jdennis.oslab.test:5000/v3/mellon/fooResponse'
 
-    client = conn.get_client_by_name(options.realm_name, options.client_name)
-
-    conn.create_client_protocol_mapper(options.realm_name, client, mapper)
-
+    conn.remove_client_by_name_redirect_uri(options.realm_name,
+                                            options.client_name,
+                                            uri)
 
 # ------------------------------------------------------------------------------
 

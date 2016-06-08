@@ -5,6 +5,7 @@ from __future__ import print_function
 import argparse
 import base64
 import copy
+from lxml import etree
 import getpass
 import grp
 import jinja2
@@ -56,6 +57,8 @@ STATUS_CONFIGURATION_ERROR = 2  # Must be 2 to match argparse exit status
 STATUS_INSUFFICIENT_PRIVILEGE = 3
 STATUS_COMMUNICATION_ERROR = 4
 STATUS_ALREADY_EXISTS_ERROR = 5
+
+SAML_PAOS_BINDING='urn:oasis:names:tc:SAML:2.0:bindings:PAOS'
 
 # --------------------------- Exception Definitions ---------------------------
 
@@ -509,6 +512,81 @@ def parse_pem(text, pem_type=None, max_items=None):
 
     return pem_blocks
 
+# ------------------------- SAML Metadata Utilities ---------------------------
+
+def get_sp_assertion_consumer_url(metadata_file, entity_id=None,
+                                  binding=None):
+    '''Retrieve AssertionConsumerURL(s) from SP metadata
+
+    Read and parse the SAML metadata contained in metadata_file.
+
+    If the entity_id is supplied then select the SP matching it,
+    this is useful when the metadata contains multiple SP's. If the
+    entity_id is not supplied then there must be exactly 1 SP in the
+    metadata, that one will be selected.
+
+    If the SAML endpoint binding is supplied then only
+    AssertionConsumerServiceURL's matching that binding will be returned,
+    otherwise all AssertionConsumerURL's will be returned.
+
+    The return value is a list of AssertionConsumerServiceURL's in the order
+    found in the metadata.
+
+    :param metadata_file:        Pathname of SAML Metadata file
+    :param entity_id (optional): EntityID of SP
+    :param binding (optional):   Filter matching this binding
+    :return:                     List of AssertionConsumerServiceURL's
+    '''
+
+    namespaces = dict(md='urn:oasis:names:tc:SAML:2.0:metadata',
+                      saml='urn:oasis:names:tc:SAML:2.0:assertion',
+                      ds='http://www.w3.org/2000/09/xmldsig#')
+
+    root = etree.parse(metadata_file).getroot()
+
+    if True or not entity_id:
+        # If entity_id was not supplied locate a unique SPSSODescriptor
+        xpath = ('//md:EntityDescriptor/md:SPSSODescriptor')
+        sp = root.xpath(xpath, namespaces=namespaces)
+        if len(sp) == 0:
+            raise ValueError('entity_id not supplied and no '
+                             'SPSSODescriptor was found')
+        elif len(sp) > 1:
+            raise ValueError('entity_id not supplied and multiple '
+                             'SPSSODescriptor elements were found')
+
+        xpath = ('ancestor::md:EntityDescriptor')
+        ed = sp[0].xpath(xpath, namespaces=namespaces)
+
+        entity_id =  ed[0].attrib['entityID']
+
+    else:
+        xpath = ('//md:EntityDescriptor[@entityID="{entity_id}"]'
+                 '/md:SPSSODescriptor'.format(entity_id=entity_id))
+
+        sp = root.xpath(xpath, namespaces=namespaces)
+        if len(sp) == 0:
+            raise IndexError('SPSSODescriptor with EntityID="{entity_id}" '
+                             'not found'.format(entity_id=entity_id))
+        elif len(sp) > 1:
+            raise ValueError('multiple SPSSODescriptor with '
+                             'EntityID="{entity_id}" found'.format(
+                                 entity_id=entity_id))
+    sp = sp[0]
+
+    if not binding:
+        xpath = 'md:AssertionConsumerService'
+        acs = sp.xpath(xpath, namespaces=namespaces)
+        urls = [x.attrib['Location'] for x in acs]
+    else:
+        xpath = 'md:AssertionConsumerService[@Binding="{binding}"]'.format(
+            binding=SAML_PAOS_BINDING)
+        acs = sp.xpath(xpath, namespaces=namespaces)
+        urls = [x.attrib['Location'] for x in acs]
+
+    return urls
+
+
 # -------------------- Certificate Creation & Installation --------------------
 
 
@@ -786,7 +864,7 @@ def main():
 
     if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
         if options.keycloak_admin_password is None:
-            if (('KEYCLOAK_ADMIN_PASSWORD' in os.environ) and 
+            if (('KEYCLOAK_ADMIN_PASSWORD' in os.environ) and
                 (os.environ['KEYCLOAK_ADMIN_PASSWORD'])):
                 options.keycloak_admin_password = (
                     os.environ['KEYCLOAK_ADMIN_PASSWORD'])
@@ -857,7 +935,7 @@ def main():
                              "because the client will need to be modified "
                              "after registration, "
                              "this requires admin privileges")
-                         
+
         if not options.initial_access_token:
             raise ValueError("You must supply an initial access token "
                              "with anonymous authentication")
@@ -878,7 +956,7 @@ def main():
         if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
             admin_conn = keycloak_cli.KeycloakAdminConnection(
                 options.keycloak_server_url,
-                options.keycloak_auth_role, 
+                options.keycloak_auth_role,
                 options.keycloak_admin_realm,
                 keycloak_cli.ADMIN_CLIENT_ID,
                 options.keycloak_admin_username,
@@ -1021,7 +1099,7 @@ def main():
                                                  realm=options.keycloak_realm))
                 else:
                     raise
-                    
+
 
             if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
                 # Enable Force Post Binding, registration service fails to
@@ -1040,13 +1118,20 @@ def main():
                                                                  options.mellon_entity_id,
                                                                  mapper)
 
+                logger.step('Add Redirect URIs to client')
+                urls = get_sp_assertion_consumer_url(options.mellon_sp_metadata_filename,
+                                                     entity_id=options.mellon_entity_id)
+                admin_conn.add_client_by_name_redirect_uris(options.keycloak_realm,
+                                                            options.mellon_entity_id,
+                                                            urls)
+
             else:
                 raise ValueError("Cannot update client settings without "
                                  "admin privileges")
-            
+
 
         else:
-            raise ValueError("Unknown client-originate-method = '%s'" % 
+            raise ValueError("Unknown client-originate-method = '%s'" %
                              options.client_originate_method)
 
 

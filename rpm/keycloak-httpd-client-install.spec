@@ -6,7 +6,7 @@
 %endif
 
 Name:           %{srcname}
-Version:        0.3
+Version:        0.4
 Release:        1%{?dist}
 Summary:        %{summary}
 
@@ -114,6 +114,13 @@ install -c -m 644 doc/keycloak-httpd-client-install.8 %{buildroot}/%{_mandir}/ma
 %endif
 
 %changelog
+* Wed Jun  8 2016 John Dennis <jdennis@redhat.com> - 0.4-1
+- new upstream
+- add methods to add/remove client redirect URI
+- add function to parse SP metadata to extract AssertionConsumerServiceURL's
+- Add all AssertionConsumerServiceURL's as redirect URI's during
+  client registration.
+
 * Fri May 20 2016 John Dennis <jdennis@redhat.com> - 0.3-1
 - new upstream
   See ChangeLog for details
