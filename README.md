@@ -13,8 +13,8 @@ registered as a client of the Keycloak IdP.
 
 This project contains both a library and an executable tool
 (keycloak-httpd-client-install) that is capable of performing the
-above steps. See the documentation for the tool in
-doc/keycloak-httpd-client-install.md. The tool automates and greatly
+above steps. See the man page for the tool in
+doc/keycloak-httpd-client-install.8. The tool automates and greatly
 simplifies the task of setting up federated authentication for Apache
 HTTPD in conjunction with Keycloak.
 
