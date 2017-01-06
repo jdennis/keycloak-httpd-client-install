@@ -26,6 +26,8 @@ LOG_FILE_ROTATION_COUNT = 3
 
 TOKEN_URL_TEMPLATE = (
     '{server}/auth/realms/{realm}/protocol/openid-connect/token')
+GET_SERVER_INFO_TEMPLATE = (
+    '{server}/auth/admin/serverinfo/')
 GET_REALMS_URL_TEMPLATE = (
     '{server}/auth/admin/realms')
 CREATE_REALM_URL_TEMPLATE = (
@@ -234,6 +236,32 @@ class KeycloakREST(object):
         logger.debug("%s response = %s", cmd_name, json_pretty(response.text))
 
         return response_json    # ClientInitialAccessPresentation
+
+    def get_server_info(self):
+        cmd_name = "get server info"
+        url = GET_SERVER_INFO_TEMPLATE.format(server=self.server)
+
+        logger.debug("%s on server %s", cmd_name, self.server)
+        response = self.session.get(url)
+        logger.debug("%s response code: %s %s",
+                     cmd_name, response.status_code, response.reason)
+
+        try:
+            response_json = response.json()
+        except ValueError as e:
+            response_json = None
+
+        if (not response_json or
+            response.status_code != requests.codes.ok):
+            logger.error("%s error: status=%s (%s) text=%s",
+                         cmd_name, response.status_code, response.reason,
+                         response.text)
+            raise RESTError(response.status_code, response.reason,
+                            response_json, response.text, cmd_name)
+
+        logger.debug("%s response = %s", cmd_name, json_pretty(response.text))
+
+        return response_json
 
     def get_realms(self):
         cmd_name = "get realms"
@@ -781,7 +809,7 @@ For example to delete the client XYZ in the realm ABC:
 where 'client' is the noun, 'delete' is the verb and -r ABC -c XYZ are
 arguments to the delete action.
 
-If the comman completes successfully the exit status is 0. The exit
+If the command completes successfully the exit status is 0. The exit
 status is 1 if an authenticated connection with the server cannont be
 successfully established. The exit status is 2 if the REST operation
 fails.

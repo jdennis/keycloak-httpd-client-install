@@ -28,7 +28,7 @@ import traceback
 
 
 from six.moves.urllib.parse import quote as urlquote
-from six.moves.urllib.parse import urlparse
+from six.moves.urllib.parse import urlsplit, urlunsplit
 
 # ----------------------------- Global Variables ------------------------------
 
@@ -345,6 +345,62 @@ def httpd_restart():
     cmd = ['/usr/bin/systemctl', 'restart', 'httpd.service']
     run_cmd(cmd)
 
+# ----------------------------- HTTP Utilities --------------------------------
+
+def normalize_url(url, default_scheme='https'):
+    '''Assure scheme and port are canonical.
+
+    SAML requires a scheme for URL's, if a scheme is not present add a
+    default scheme.
+
+    Strip the port from the URL if it matches the scheme (e.g. 80 for
+    http and 443 for https)
+
+    Explicitly specifying a default port (e.g. http://example.com:80
+    or https://example.com:443) will cause Mellon to fail. This occurs
+    because the port gets embedded into the location URL for each
+    endpoint in the SP metadata (e.g the Assertion Consumer
+    Service). The IdP sets the Destination attribute in the SAML
+    response by looking it up in the SP metadata, thus the Destination
+    will have the default port in it (e.g. 443). Upon receiving the
+    SAML response the SP compares the URL of the request to the
+    Destination attribute in the SAML response, they must match for
+    the response to be considered valid. However when Mellon asks
+    Apache what the request URL was it won't have the port in it thus
+    the URL comparison fails. So why is the port absent? It turns out
+    that most (all?) browsers will strip the port from a URL if it
+    matches the port for the scheme (e.g. 80 for http and 443 for
+    https). Thus even if you include the port in the URL it will never
+    be included in the URL the browser emits. This also includes
+    stripping the port from the HTTP host header (which Apache uses to
+    reconstruct the URL).
+    '''
+
+    s = urlsplit(url)
+    scheme = s.scheme
+    netloc = s.netloc
+    path = s.path
+    query = s.query
+    fragment = s.fragment
+    hostname = s.hostname
+    port = s.port
+    
+    if not scheme:
+        scheme = default_scheme
+
+    if port is not None:
+        if scheme == 'http' and port == 80:
+            port = None
+        elif scheme == 'https' and port == 443:
+            port = None
+
+    if port is None:
+        netloc = hostname
+    else:
+        netloc = "%s:%d" % (hostname, port)
+
+    return urlunsplit((scheme, netloc, path, query, fragment))
+
 # ------------------------------ PEM Utilities --------------------------------
 
 
@@ -586,6 +642,56 @@ def get_sp_assertion_consumer_url(metadata_file, entity_id=None,
 
     return urls
 
+
+def get_entity_id_from_metadata(metadata_file, role):
+    '''Retrieve entityID from metadata
+
+    Read and parse the SAML metadata contained in metadata_file,
+    search for one of the following roles and return the entityID
+    associated with that role.
+
+    SSO Identity Provider (role='idp')
+    SSO Service Provider (role='sp')
+    Authentication Authority (role='authn_authority')
+    Attribute Authority (role='attr_authority)
+    Policy Decision Point (role='pdp')
+
+    :param metadata_file:        Pathname of SAML Metadata file
+    :param role:                 one of: idp, sp, authn_authority,
+                                 attr_authority, pdp
+    :return:                     entityID
+    '''
+
+    roles = {'idp':             'IDPSSODescriptor',
+             'sp':              'SPSSODescriptor',
+             'authn_authority': 'AuthnAuthorityDescriptor',
+             'attr_authority':  'AttributeAuthorityDescriptor',
+             'pdp':             'PDPDescriptor'}
+
+
+    role_descriptor = roles.get(role)
+    if role_descriptor is None:
+        raise ValueError("invalid role '%s', must be one of: %s" %
+                         (role, ', '.join(sorted(roles.keys()))))
+
+    namespaces = dict(md='urn:oasis:names:tc:SAML:2.0:metadata',
+                      saml='urn:oasis:names:tc:SAML:2.0:assertion',
+                      ds='http://www.w3.org/2000/09/xmldsig#')
+
+    root = etree.parse(metadata_file).getroot()
+    
+    xpath = '//md:EntityDescriptor/md:%s' % role_descriptor
+    entity = root.xpath(xpath, namespaces=namespaces)
+    if len(entity) == 0:
+        raise ValueError('no %s found' % role_descriptor)
+    elif len(entity) > 1:
+        raise ValueError('multiple EntityDescriptor elements found')
+
+    xpath = ('ancestor::md:EntityDescriptor')
+    ed = entity[0].xpath(xpath, namespaces=namespaces)
+
+    entity_id =  ed[0].attrib['entityID']
+    return entity_id
 
 # -------------------- Certificate Creation & Installation --------------------
 
@@ -912,10 +1018,9 @@ def main():
                          app_name=options.app_name,
                          realm=options.keycloak_realm))
     options.mellon_http_url = \
-        'https://{mellon_hostname}:{mellon_https_port}'.format(
+        normalize_url('https://{mellon_hostname}:{mellon_https_port}'.format(
             mellon_hostname=options.mellon_hostname,
-            mellon_https_port=options.mellon_https_port)
-
+            mellon_https_port=options.mellon_https_port))
     options.mellon_endpoint_path = '{mellon_root}/{mellon_endpoint}'.format(
         mellon_root=options.mellon_root,
         mellon_endpoint=options.mellon_endpoint)
@@ -1156,6 +1261,7 @@ def main():
     # ===== Wrap Up =====
 
     logger.step('Completed Successfully')
+    logger.info('mellon entityID="%s"' % options.mellon_entity_id)
     return STATUS_SUCCESS
 
 # -----------------------------------------------------------------------------
