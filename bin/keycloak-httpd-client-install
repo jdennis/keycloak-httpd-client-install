@@ -158,6 +158,48 @@ def configure_logging(options):
     # handler basis.
     root_logger.setLevel(1)
 
+# ----------------------------- General Utilities -----------------------------
+
+def join_path(*args):
+    '''Join each argument into a final path assuring there is
+    exactly one slash separating all components in the final path
+    and there are no leading or trailing spaces between path components.
+    Initial or final slashes are preserved but are collapsed into a
+    single slash.
+
+    Why not use posixpath.join and posixpath.normpath? Because they do not
+    handle multiple slashes, leading and trailing slashes the way we want'''
+
+    if not args:
+        return ''
+
+    components = []
+
+    for item in args:
+        components.extend(item.split('/'))
+        
+    if components[0]:
+        leading_slash = False
+    else:
+        leading_slash = True 
+
+    if components[-1]:
+        trailing_slash = False
+    else:
+        trailing_slash = True
+
+    components = [x.strip() for x in components if x]
+
+    path = '/'.join(components)
+
+    if leading_slash:
+        path = '/' + path
+
+    if trailing_slash and components:
+        path = path + '/'
+
+    return path
+
 # -------------------------- Shell Command Utilities --------------------------
 
 
@@ -855,6 +897,15 @@ def main():
                         help='Normally secure transport such as TLS '
                         'is required, defeat this check')
 
+    parser.add_argument('--tls-verify', action=keycloak_cli.TlsVerifyAction,
+                        default=True,
+                        help='TLS certificate verification for requests to'
+                        ' the server. May be one of case insenstive '
+                        '[true, yes, on] to enable,'
+                        '[false, no, off] to disable.'
+                        'Or the pathname to a OpenSSL CA bundle to use.'
+                        ' Default is True.')
+
     # ---- Argument Group "Program Configuration"  ----
 
     group = parser.add_argument_group('Program Configuration')
@@ -931,7 +982,8 @@ def main():
                        '{mellon_root}/{mellon_endpoint}.')
 
     group.add_argument('--mellon-entity-id',
-                       help='SP SAML Entity ID')
+                       help='SP SAML Entity ID, '
+                       'defaults to {mellon_http_url}/{mellon_endpoint_path}/metadata')
 
     group.add_argument('--mellon-idp-attr-name', default='IDP',
                        help='name of the attribute Mellon adds which will '
@@ -1021,25 +1073,23 @@ def main():
         normalize_url('https://{mellon_hostname}:{mellon_https_port}'.format(
             mellon_hostname=options.mellon_hostname,
             mellon_https_port=options.mellon_https_port))
-    options.mellon_endpoint_path = '{mellon_root}/{mellon_endpoint}'.format(
-        mellon_root=options.mellon_root,
-        mellon_endpoint=options.mellon_endpoint)
+    options.mellon_endpoint_path = join_path(options.mellon_root, options.mellon_endpoint)
 
     if not options.mellon_entity_id:
-        options.mellon_entity_id = (
-            '{mellon_http_url}{mellon_endpoint_path}/metadata'.format(
-                mellon_http_url=options.mellon_http_url,
-                mellon_endpoint_path=options.mellon_endpoint_path))
+        url = urlsplit(options.mellon_http_url)
+        options.mellon_entity_id = urlunsplit((url.scheme, url.netloc,
+                                               join_path(options.mellon_endpoint_path, 'metadata'),
+                                               '', ''))
 
     # ===== Validate Options =====
 
     if options.keycloak_auth_role == 'anonymous':
         if options.client_originate_method == 'registration':
-            raise ValueError("You cannot use client originate method "
-                             "'registration' with anonymous authentication "
-                             "because the client will need to be modified "
-                             "after registration, "
-                             "this requires admin privileges")
+            logger.warn("Using client originate method 'registration' with the 'anonymous'\n"
+                        "authentication role disables updating the client configuration after\n"
+                        "registration. You may need to adjust the client configuration manually\n"
+                        "in the Keycloak admin console. Use one of the admin authentication\n"
+                        "roles to permit automated client configuration.\n")
 
         if not options.initial_access_token:
             raise ValueError("You must supply an initial access token "
@@ -1056,7 +1106,8 @@ def main():
             os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
         anonymous_conn = keycloak_cli.KeycloakAnonymousConnection(
-            options.keycloak_server_url)
+            options.keycloak_server_url,
+            options.tls_verify)
 
         if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
             admin_conn = keycloak_cli.KeycloakAdminConnection(
@@ -1065,7 +1116,8 @@ def main():
                 options.keycloak_admin_realm,
                 keycloak_cli.ADMIN_CLIENT_ID,
                 options.keycloak_admin_username,
-                options.keycloak_admin_password)
+                options.keycloak_admin_password,
+                options.tls_verify)
         else:
             admin_conn = None
 
@@ -1204,45 +1256,37 @@ def main():
                                                  realm=options.keycloak_realm))
                 else:
                     raise
-
-
-            if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
-                # Enable Force Post Binding, registration service fails to
-                # to enable it (however creation with client descriptor does)
-                logger.step('Enable saml.force.post.binding')
-                update_attrs = {'saml.force.post.binding': True}
-                admin_conn.update_client_by_name_attributes(options.keycloak_realm,
-                                                            options.mellon_entity_id,
-                                                            update_attrs)
-
-                logger.step('Add group attribute mapper to client')
-                mapper = admin_conn.new_saml_group_protocol_mapper(
-                    'group list', 'groups',
-                    friendly_name='List of groups user is a member of')
-                admin_conn.create_client_by_name_protocol_mapper(options.keycloak_realm,
-                                                                 options.mellon_entity_id,
-                                                                 mapper)
-
-                logger.step('Add Redirect URIs to client')
-                urls = get_sp_assertion_consumer_url(options.mellon_sp_metadata_filename,
-                                                     entity_id=options.mellon_entity_id)
-                admin_conn.add_client_by_name_redirect_uris(options.keycloak_realm,
-                                                            options.mellon_entity_id,
-                                                            urls)
-
-            else:
-                raise ValueError("Cannot update client settings without "
-                                 "admin privileges")
-
-
         else:
             raise ValueError("Unknown client-originate-method = '%s'" %
                              options.client_originate_method)
 
 
+        if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+            # Enable Force Post Binding, registration service fails to
+            # to enable it (however creation with client descriptor does)
+            logger.step('Enable saml.force.post.binding')
+            update_attrs = {'saml.force.post.binding': True}
+            admin_conn.update_client_by_name_attributes(options.keycloak_realm,
+                                                        options.mellon_entity_id,
+                                                        update_attrs)
+
+            logger.step('Add group attribute mapper to client')
+            mapper = admin_conn.new_saml_group_protocol_mapper(
+                'group list', 'groups',
+                friendly_name='List of groups user is a member of')
+            admin_conn.create_client_by_name_protocol_mapper(options.keycloak_realm,
+                                                             options.mellon_entity_id,
+                                                             mapper)
+
+            logger.step('Add Redirect URIs to client')
+            urls = get_sp_assertion_consumer_url(options.mellon_sp_metadata_filename,
+                                                 entity_id=options.mellon_entity_id)
+            admin_conn.add_client_by_name_redirect_uris(options.keycloak_realm,
+                                                        options.mellon_entity_id,
+                                                        urls)
 
         logger.step('Retrieve IdP metadata from Keycloak server')
-        idp_metadata = admin_conn.get_realm_metadata(options.keycloak_realm)
+        idp_metadata = anonymous_conn.get_realm_metadata(options.keycloak_realm)
         install_file_from_data(idp_metadata,
                                options.mellon_dst_idp_metadata_file)
 

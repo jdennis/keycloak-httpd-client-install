@@ -699,7 +699,8 @@ class KeycloakREST(object):
 
 class KeycloakAdminConnection(KeycloakREST):
 
-    def __init__(self, server, auth_role, realm, client_id, username, password):
+    def __init__(self, server, auth_role, realm, client_id,
+                 username, password, tls_verify):
         super(KeycloakAdminConnection, self).__init__(server, auth_role)
 
         self.realm = realm
@@ -707,9 +708,9 @@ class KeycloakAdminConnection(KeycloakREST):
         self.username = username
         self.password = password
 
-        self.session = self._create_session()
+        self.session = self._create_session(tls_verify)
 
-    def _create_session(self):
+    def _create_session(self, tls_verify):
         token_url = TOKEN_URL_TEMPLATE.format(
             server=self.server, realm=urlquote(self.realm))
         refresh_url = token_url
@@ -720,27 +721,35 @@ class KeycloakAdminConnection(KeycloakREST):
                                 auto_refresh_kwargs={
                                     'client_id': self.client_id})
 
+        session.verify = tls_verify
         token = session.fetch_token(token_url=token_url,
                                     username=self.username,
                                     password=self.password,
-                                    client_id=self.client_id)
+                                    client_id=self.client_id,
+                                    verify=session.verify)
 
         return session
 
 
 class KeycloakAnonymousConnection(KeycloakREST):
 
-    def __init__(self, server):
+    def __init__(self, server, tls_verify):
         super(KeycloakAnonymousConnection, self).__init__(server, 'anonymous')
-        self.session = self._create_session()
+        self.session = self._create_session(tls_verify)
 
 
-    def _create_session(self):
+    def _create_session(self, tls_verify):
         session = requests.Session()
+        session.verify = tls_verify
 
         return session
 
 # ------------------------------------------------------------------------------
+
+
+def do_server_info(options, conn):
+    server_info = conn.get_server_info()
+    print(json_pretty(server_info))
 
 
 def do_list_realms(options, conn):
@@ -818,6 +827,22 @@ The server should be a scheme://hostname:port URL.
 '''
 
 
+class TlsVerifyAction(argparse.Action):
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        if nargs is not None:
+            raise ValueError("nargs not allowed")
+        super(TlsVerifyAction, self).__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if values.lower() in ['true', 'yes', 'on']:
+            verify = True
+        elif values.lower() in ['false', 'no', 'off']:
+            verify = False
+        else:
+            verify = values
+            
+        setattr(namespace, self.dest, verify)
+
 def main():
     global logger
     result = 0
@@ -845,6 +870,15 @@ def main():
     parser.add_argument('--permit-insecure-transport',  action='store_true',
                         help='Normally secure transport such as TLS '
                         'is required, defeat this check')
+
+    parser.add_argument('--tls-verify', action=TlsVerifyAction,
+                        default=True,
+                        help='TLS certificate verification for requests to'
+                        ' the server. May be one of case insenstive '
+                        '[true, yes, on] to enable,'
+                        '[false, no, off] to disable.'
+                        'Or the pathname to a OpenSSL CA bundle to use.'
+                        ' Default is True.')
 
     group = parser.add_argument_group('Server')
 
@@ -876,6 +910,10 @@ def main():
                                           help='realm operations')
 
     sub_parser = realm_parser.add_subparsers(help='realm commands')
+
+    cmd_parser = sub_parser.add_parser('server_info',
+                                       help='dump server info')
+    cmd_parser.set_defaults(func=do_server_info)
 
     cmd_parser = sub_parser.add_parser('list',
                                        help='list realm names')
@@ -958,14 +996,16 @@ def main():
         os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
     try:
-        anonymous_conn = KeycloakAnonymousConnection(options.server)
+        anonymous_conn = KeycloakAnonymousConnection(options.server,
+                                                     options.tls_verify)
 
         admin_conn = KeycloakAdminConnection(options.server,
                                              options.auth_role,
                                              options.admin_realm,
                                              ADMIN_CLIENT_ID,
                                              options.admin_username,
-                                             options.admin_password)
+                                             options.admin_password,
+                                             options.tls_verify)
     except Exception as e:
         if options.show_traceback:
             traceback.print_exc()

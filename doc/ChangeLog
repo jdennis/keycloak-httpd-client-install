@@ -1,3 +1,11 @@
+2017-03-01  John Dennis  <jdennis@redhat.com> 0.6
+  * fix bug, if --mellon-root is not supplied and defaults to /
+    you end up with double slashes in entityId and endpoints
+  * add --tls-verify option to control python-requests behavor when
+    using tls to connect. With this option you can use a self-signed
+    cert or point to a CA bundle.
+  * Fix warnings and checks when using client originate method
+    'registration' with 'anonymous' authentication.
 2017-01-06  John Dennis  <jdennis@redhat.com> 0.5
   * fix bug with default ports 80 and 443
     default ports should not be present in URL

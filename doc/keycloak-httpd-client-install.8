@@ -15,6 +15,7 @@ Tools to configure Apache HTTPD as Keycloak client
 \fB\-\-app\-name\fR \fIAPP_NAME\fR
 [\fB\-\-force\fR]
 [\fB\-\-permit\-insecure\-transport\fR]
+[\fB\-\-tls\-verify\fR]
 [\fB\-\-template\-dir\fR \fITEMPLATE_DIR\fR]
 [\fB\-\-httpd\-dir\fR \fIHTTPD_DIR\fR] \-r KEYCLOAK_REALM
 \fB\-s\fR \fIKEYCLOAK_SERVER_URL\fR
@@ -23,7 +24,7 @@ Tools to configure Apache HTTPD as Keycloak client
 \fB\-p\fR \fIKEYCLOAK_ADMIN_PASSWORD\fR
 [\fB\-\-keycloak\-admin\-realm\fR \fIKEYCLOAK_ADMIN_REALM\fR]
 [\fB\-\-initial\-access\-token\fR \fIINITIAL_ACCESS_TOKEN\fR]
-[\fB\-\-client\-originate\-method\fR \fI{descriptor|registration}\fR]
+[\fB\-\-client\-originate\-method\fR \fIdescriptor|registration\fR]
 [\fB\-\-mellon\-key\-file\fR \fIMELLON_KEY_FILE\fR]
 [\fB\-\-mellon\-cert\-file\fR \fIMELLON_CERT_FILE\fR]
 [\fB\-\-mellon\-hostname\fR \fIMELLON_HOSTNAME\fR]
@@ -76,6 +77,12 @@ forcefully override safety checks
 Normally secure transport such as TLS is required,
 defeat this check
 (default: False)
+.TP
+.BR \-\-tls\-verify
+TLS certificate verification for requests to the server. May be one of
+case insenstive [true, yes, on] to enable, [false, no, off] to
+disable. Or the pathname to a OpenSSL CA bundle to use.
+(default: True)
 
 .PP
 Program Configuration:
