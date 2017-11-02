@@ -850,7 +850,7 @@ def arg_type_mellon_protected_location(value):
     if not value.startswith('/'):
         raise argparse.ArgumentTypeError('Location must be absolute '
                                          '(arg="%s")' % value)
-    return value
+    return value.rstrip(" /")
 
 # -----------------------------------------------------------------------------
 
@@ -1083,18 +1083,36 @@ def main():
 
     # ===== Validate Options =====
 
-    if options.keycloak_auth_role == 'anonymous':
-        if options.client_originate_method == 'registration':
-            logger.warn("Using client originate method 'registration' with the 'anonymous'\n"
-                        "authentication role disables updating the client configuration after\n"
-                        "registration. You may need to adjust the client configuration manually\n"
-                        "in the Keycloak admin console. Use one of the admin authentication\n"
-                        "roles to permit automated client configuration.\n")
+    try:
+        if options.keycloak_auth_role == 'anonymous':
+            if options.client_originate_method == 'registration':
+                logger.warn("Using client originate method 'registration' with the 'anonymous'\n"
+                            "authentication role disables updating the client configuration after\n"
+                            "registration. You may need to adjust the client configuration manually\n"
+                            "in the Keycloak admin console. Use one of the admin authentication\n"
+                            "roles to permit automated client configuration.\n")
 
-        if not options.initial_access_token:
-            raise ValueError("You must supply an initial access token "
-                             "with anonymous authentication")
+            if not options.initial_access_token:
+                raise ValueError("You must supply an initial access token "
+                                 "with anonymous authentication")
 
+
+        root = options.mellon_root + "/"
+        for location in options.mellon_protected_locations:
+            location = location + "/"
+            print("%s %s" % (root, location))
+            if not location.startswith(root):
+                raise ValueError('Invalid protected location "%s" '
+                                 'must be equal to or ancestor of the mellon '
+                                 'root "%s"' % (
+                                     location, root))
+
+    except Exception as e:
+        if options.show_traceback:
+            traceback.print_exc()
+        print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
+              file=sys.stderr)
+        return STATUS_CONFIGURATION_ERROR
 
     # ===== Establish Keycloak Server Communication =====
 

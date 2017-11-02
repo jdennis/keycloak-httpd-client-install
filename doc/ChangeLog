@@ -1,3 +1,6 @@
+2017-11-02  John Dennis  <jdennis@redhat.com> 0.7
+  * fix rhbz#1481322, mellon-root and mellon-protected-locations need
+    to be validated
 2017-03-01  John Dennis  <jdennis@redhat.com> 0.6
   * fix bug, if --mellon-root is not supplied and defaults to /
     you end up with double slashes in entityId and endpoints
