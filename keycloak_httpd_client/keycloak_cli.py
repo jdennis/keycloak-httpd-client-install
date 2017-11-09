@@ -903,7 +903,7 @@ def main():
                        default='master',
                        help='realm admin belongs to')
 
-    cmd_parsers = parser.add_subparsers(help='avaiable commands')
+    cmd_parsers = parser.add_subparsers(help='available commands')
 
     # --- realm commands ---
     realm_parser = cmd_parsers.add_parser('realm',
