@@ -863,7 +863,7 @@ def main():
                              'error message')
 
     parser.add_argument('--log-file',
-                        default='/tmp/{prog_name}.log'.format(
+                        default='{prog_name}.log'.format(
                             prog_name=prog_name),
                         help='log file pathname')
 
