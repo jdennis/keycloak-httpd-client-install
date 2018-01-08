@@ -21,6 +21,7 @@ Tools to configure Apache HTTPD as Keycloak client
 \fB\-s\fR \fIKEYCLOAK_SERVER_URL\fR
 [\fB\-a\fR \fIroot\-admin|realm\-admin|anonymous\fR]
 [\fB\-u\fR \fIKEYCLOAK_ADMIN_USERNAME\fR]
+\fB\-P\fR \fIKEYCLOAK_ADMIN_PASSWORD_FILE\fR
 \fB\-p\fR \fIKEYCLOAK_ADMIN_PASSWORD\fR
 [\fB\-\-keycloak\-admin\-realm\fR \fIKEYCLOAK_ADMIN_REALM\fR]
 [\fB\-\-initial\-access\-token\fR \fIINITIAL_ACCESS_TOKEN\fR]
@@ -116,9 +117,21 @@ authenticating as what type of user
 admin user name
 (default: admin)
 .TP
-.BR \-p ", " \-\-keycloak\-admin\-password " " \fIKEYCLOAK_ADMIN_PASSWORD\fR
-admin password (use - to read from stdin)
+.BR \-P ", " \-\-keycloak\-admin\-password\-file " " \fIKEYCLOAK_ADMIN_PASSWORD_FILE\fR
+file containing the admin password (or use a hyphen "-" to indicate the
+password will be read from stdin)
 (default: None)
+.TP
+.BR \-p ", " \-\-keycloak\-admin\-password " " \fIKEYCLOAK_ADMIN_PASSWORD\fR
+admin password (or use a hyphen "-" to to indicate the password will read
+from stdin)
+(default: None)
+\fB Deprecated.\fR It is insecure to pass a password on the command line.
+Use \fI\-\-keycloak\-admin\-password\-file\fR instead. \fBIt is no longer
+possible to use this argument to pass a password.\fR During a transition
+period this argument will continue to accept a hyphen to indicate the
+password should be read from stdin in a manner identical to
+\fI\-\-keycloak\-admin\-password\-file\fR.
 .TP
 .BR \-\-keycloak\-admin\-realm " " \fIKEYCLOAK_ADMIN_REALM\fR
 realm admin belongs to
@@ -185,6 +198,31 @@ Web location to protect with Mellon. May be specified multiple times
 .SH DESCRIPTION
 
 \fBkeycloak\-httpd\-client\-install\fR will configure a node running Apache with mod_auth_mellon as SAML Service Provider (\fBSP\fR) utilizing a \fBKeycloak\fR server as an Identity Provider(\fBIdP\fR).
+
+.PP
+.B How to pass the Keycloak admin password
+
+.PP
+The Keycloak admin password may be passed via one of the possible ways listed
+here in the order the tool looks for the password.
+
+.PP
+\fB1.\fR Try the \fI\-\-keycloak\-admin\-password\-file\fR argument.
+If it's a hyphen read the password from stdin, otherwise treat the argument
+as the name of a file, open the file and read the password from the file.
+
+.PP
+\fB2.\fR Test for the existence of the \fBKEYCLOAK_ADMIN_PASSWORD\fR
+environment variable. If the \fBKEYCLOAK_ADMIN_PASSWORD\fR is defined
+read the password from it.
+
+.PP
+\fB3.\fR Try the \fBdeprecated\fR \fI\-\-keycloak\-admin\-password\fR argument.
+If it's a hyphen read the password from stdin, otherwise return an error
+because passwords should never be passed on the command line.
+
+.PP
+\fB4.\fR Prompt for the password from the terminal.
 
 .PP
 .B Authentication Levels and Permissions
@@ -281,7 +319,7 @@ The REST API may be used by the following authentication roles:
 \fB*\fR Connect to Keycloak Server.
 .RS
 .PP
-A session is established with the Keycloak server. OAuth2 is used to log in as the admin user using the \fB\-\-keycloak\-admin\-username\fR and \fB\-\-keycloak\-admin\-password\fR options. The Keycloak server is identified by the \fB\-keycloak\-server\-url\fR option. This step is performed first to assure the remaining steps can complete successfully. A session is maintained for efficiency reasons. You may also need to specify \fB\-\-keycloak\-admin\-role\fR and \fB\-\-keycloak\-admin\-realm\fR to indicate the privilege level you are authenticating with. An anonymous auth role connects to the Keycloak service without any authentication.
+A session is established with the Keycloak server. OAuth2 is used to log in as the admin user using the \fB\-\-keycloak\-admin\-username\fR and \fB\-\-keycloak\-admin\-password\-file\fR options. The Keycloak server is identified by the \fB\-keycloak\-server\-url\fR option. This step is performed first to assure the remaining steps can complete successfully. A session is maintained for efficiency reasons. You may also need to specify \fB\-\-keycloak\-admin\-role\fR and \fB\-\-keycloak\-admin\-realm\fR to indicate the privilege level you are authenticating with. An anonymous auth role connects to the Keycloak service without any authentication.
 .RE
 
 .PP

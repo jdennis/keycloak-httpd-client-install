@@ -852,6 +852,29 @@ def arg_type_mellon_protected_location(value):
                                          '(arg="%s")' % value)
     return value.rstrip(" /")
 
+class DeprecatedPasswordAction(argparse.Action):
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        super(DeprecatedPasswordAction, self).__init__(option_strings, dest,
+                                                       **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        msg1 = ('%s Deprecated. Use --keycloak-admin-password-file instead '
+                '(which also accepts - to read from stdin) '
+                'or the KEYCLOAK_ADMIN_PASSWORD environment variable. '
+                'Using "-" to read the password from stdin '
+                'will continue to work for the new few releases for backward '
+                'compatibility, then will be removed. '
+                'See the man page.' % self.option_strings)
+        msg2 = ('Deprecated. It is insecure to pass a password on the '
+                'command line. Use --keycloak-admin-password-file or the '
+                'KEYCLOAK_ADMIN_PASSWORD environment variable instead. '
+                'See the man page.')
+        if values == '-':
+            print(msg1, file=sys.stderr)
+            setattr(namespace, self.dest, values)
+        else:
+            raise argparse.ArgumentError(self, msg2)
+
 # -----------------------------------------------------------------------------
 
 
@@ -941,8 +964,19 @@ def main():
     group.add_argument('-u', '--keycloak-admin-username', default='admin',
                        help='admin user name (default: admin)')
 
+    group.add_argument('-P', '--keycloak-admin-password-file',
+                       type=argparse.FileType('rb'),
+                       help=('file containing admin password '
+                             '(or use a hyphen "-" to read the password '
+                             'from stdin)'))
+
     group.add_argument('-p', '--keycloak-admin-password',
-                       help='admin password (use - to read from stdin)')
+                       action=DeprecatedPasswordAction,
+                       dest='deprecated_keycloak_admin_password',
+                       help=('Deprecated. Use  --keycloak-admin-password-file '
+                             'instead. During transition perion this argument '
+                             'will continue to accept a hyphen to indicate '
+                             'the password will be read read from stdin)'))
 
     group.add_argument('--keycloak-admin-realm',
                        default='master',
@@ -1020,17 +1054,34 @@ def main():
 
     # ===== Options requiring special handling =====
 
+    options.keycloak_admin_password = None
     if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+
+        # We need the admin password for this role
+
+        # 1. Try password file
+        if options.keycloak_admin_password_file is not None:
+            options.keycloak_admin_password = options.keycloak_admin_password_file.readline().strip()
+            options.keycloak_admin_password_file.close()
+
+        # 2. Try KEYCLOAK_ADMIN_PASSWORD environment variable
         if options.keycloak_admin_password is None:
             if (('KEYCLOAK_ADMIN_PASSWORD' in os.environ) and
                 (os.environ['KEYCLOAK_ADMIN_PASSWORD'])):
                 options.keycloak_admin_password = (
                     os.environ['KEYCLOAK_ADMIN_PASSWORD'])
-            else:
-                options.keycloak_admin_password = getpass.getpass(
-                    '%s password: ' % (options.keycloak_admin_username))
-        elif options.keycloak_admin_password == '-':
-            options.keycloak_admin_password = sys.stdin.readline().rstrip('\n')
+
+        # 3. Try deprecated keycloak-admin-password, accept only hyphen for stdin
+        try:
+            if options.deprecated_keycloak_admin_password == '-':
+                options.keycloak_admin_password = sys.stdin.readline().strip()
+        except AttributeError:
+            pass
+
+        # 4. Try prompting for the password from the terminal
+        if options.keycloak_admin_password is None:
+            options.keycloak_admin_password = getpass.getpass(
+                'enter %s password: ' % (options.keycloak_admin_username))
 
         if not options.keycloak_admin_password:
             parser.error('argument %s is required '

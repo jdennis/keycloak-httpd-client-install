@@ -813,7 +813,7 @@ verb.
 
 For example to delete the client XYZ in the realm ABC:
 
-{prog_name} -s http://example.com:8080 -p password client delete -r ABC -c XYZ
+echo password | {prog_name} -s http://example.com:8080 -P - client delete -r ABC -c XYZ
 
 where 'client' is the noun, 'delete' is the verb and -r ABC -c XYZ are
 arguments to the delete action.
@@ -895,9 +895,11 @@ def main():
                        default='admin',
                        help='admin user name (default: admin)')
 
-    group.add_argument('-p', '--admin-password',
-                       required=True,
-                       help='admin password')
+    group.add_argument('-P', '--admin-password-file',
+                       type=argparse.FileType('rb'),
+                       help=('file containing admin password '
+                             '(or use a hyphen "-" to read the password '
+                             'from stdin)'))
 
     group.add_argument('--admin-realm',
                        default='master',
@@ -994,6 +996,20 @@ def main():
 
     if options.permit_insecure_transport:
         os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+
+    # Get admin password
+    options.admin_password = None
+
+    # 1. Try password file
+    if options.admin_password_file is not None:
+        options.admin_password = options.keycloak_admin_password_file.readline().strip()
+        options.keycloak_admin_password_file.close()
+
+    # 2. Try KEYCLOAK_ADMIN_PASSWORD environment variable
+    if options.admin_password is None:
+        if (('KEYCLOAK_ADMIN_PASSWORD' in os.environ) and
+            (os.environ['KEYCLOAK_ADMIN_PASSWORD'])):
+            options.admin_password = os.environ['KEYCLOAK_ADMIN_PASSWORD']
 
     try:
         anonymous_conn = KeycloakAnonymousConnection(options.server,
