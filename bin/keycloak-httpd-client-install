@@ -1097,10 +1097,9 @@ def main():
                                  "with anonymous authentication")
 
 
-        root = options.mellon_root + "/"
+        root = join_path(options.mellon_root, '/')
         for location in options.mellon_protected_locations:
-            location = location + "/"
-            print("%s %s" % (root, location))
+            location = join_path(location, '/')
             if not location.startswith(root):
                 raise ValueError('Invalid protected location "%s" '
                                  'must be equal to or ancestor of the mellon '
