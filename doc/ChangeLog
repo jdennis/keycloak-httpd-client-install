@@ -1,3 +1,9 @@
+2018-01-09  John Dennis  <jdennis@redhat.com> 0.8
+  * CVE-2017-15112 unsafe use of -p/--admin-password on command line
+  * CVE-2017-15111 unsafe /tmp log file in --log-file option in keycloak_cli.py
+  * fix patch in 0.7, mellon-root and mellon-protected-locations need
+    to be validated, should have used join_path() utility instead of
+    concatenation.
 2017-11-02  John Dennis  <jdennis@redhat.com> 0.7
   * fix rhbz#1481322, mellon-root and mellon-protected-locations need
     to be validated
