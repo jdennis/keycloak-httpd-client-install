@@ -49,7 +49,10 @@ HTTPD_CONF_DIR = 'conf.d'
 MELLON_METADATA_TEMPLATE = 'sp_metadata.tpl'
 MELLON_METADATA = 'sp_metadata.xml'
 
+OIDC_METADATA_TEMPLATE = 'sp_metadata.tpl'
+
 MELLON_HTTPD_CONFIG_TEMPLATE = 'mellon_httpd.conf'
+OIDC_MELLON_HTTPD_CONFIG_TEMPLATE = 'oidc_mellon_httpd.conf'
 
 STATUS_SUCCESS = 0
 STATUS_OPERATION_ERROR = 1
@@ -177,11 +180,11 @@ def join_path(*args):
 
     for item in args:
         components.extend(item.split('/'))
-        
+
     if components[0]:
         leading_slash = False
     else:
-        leading_slash = True 
+        leading_slash = True
 
     if components[-1]:
         trailing_slash = False
@@ -426,7 +429,7 @@ def normalize_url(url, default_scheme='https'):
     fragment = s.fragment
     hostname = s.hostname
     port = s.port
-    
+
     if not scheme:
         scheme = default_scheme
 
@@ -721,7 +724,7 @@ def get_entity_id_from_metadata(metadata_file, role):
                       ds='http://www.w3.org/2000/09/xmldsig#')
 
     root = etree.parse(metadata_file).getroot()
-    
+
     xpath = '//md:EntityDescriptor/md:%s' % role_descriptor
     entity = root.xpath(xpath, namespaces=namespaces)
     if len(entity) == 0:
@@ -832,11 +835,21 @@ def build_mellon_httpd_config_file(options):
     template = template_env.get_template(MELLON_HTTPD_CONFIG_TEMPLATE)
     return template.render(template_params)
 
+def build_oidc_mellon_httpd_config_file(options):
+    template_params = build_template_params(options)
+    template = template_env.get_template(OIDC_MELLON_HTTPD_CONFIG_TEMPLATE)
+    return template.render(template_params)
 
 def build_mellon_sp_metadata_file(options):
     template_params = build_template_params(options)
     template = template_env.get_template(MELLON_METADATA_TEMPLATE)
     return template.render(template_params)
+
+def build_oidc_sp_metadata_file(options):
+    template_params = build_template_params(options)
+    template = template_env.get_template(OIDC_METADATA_TEMPLATE)
+    return template.render(template_params)
+
 
 # ------------ Argparse Argument Conversion/Validation Functions --------------
 
@@ -883,7 +896,7 @@ def main():
 
     # ===== Command Line Arguments =====
     parser = argparse.ArgumentParser(
-            description='Configure mod_auth_mellon as Keycloak client',
+            description='Configure mod_auth_mellon or mod_auth_openidc as Keycloak client',
             prog=prog_name,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
@@ -1036,6 +1049,19 @@ def main():
                        type=arg_type_mellon_protected_location, default=[],
                        help='Web location to protect with Mellon. '
                             'May be specified multiple times')
+
+    # ---- Argument Group "OIDC SP" ----
+
+    group.add_argument('--OIDC-root', default='/',
+                        help='common root ancestor for all OIDC endpoints')
+
+    group.add_argument('--OIDC-protected-locations', actions='append',
+                        type=arg_type_mellon_protected_location, default=[],
+                        help='Web location to protect with OIDC. '
+                              'May be specified multiple times')
+
+    group.add_argument('--OIDC-https-port', default=80, type=int,
+                        help="SSL/TLS port on mellon-hostname)
 
     # ===== Process command line arguments =====
 
