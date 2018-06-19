@@ -50,6 +50,7 @@ MELLON_METADATA_TEMPLATE = 'sp_metadata.tpl'
 MELLON_METADATA = 'sp_metadata.xml'
 
 OIDC_METADATA_TEMPLATE = 'sp_metadata.tpl'
+OIDC_METADATA = 'sp_metadata.xml'
 
 MELLON_HTTPD_CONFIG_TEMPLATE = 'mellon_httpd.conf'
 OIDC_MELLON_HTTPD_CONFIG_TEMPLATE = 'oidc_mellon_httpd.conf'
@@ -821,6 +822,19 @@ def install_mellon_cert(options):
         install_file_from_data(key, options.mellon_dst_key_file)
         install_file_from_data(cert, options.mellon_dst_cert_file)
 
+def install_oidc_cert(options):
+    if options.oidc_key_file or options.oidc_cert_file:
+        if not (options.oidc_key_file and options.oidc_cert_file):
+            raise ValueError('You must specify both a cert and key file, '
+                             'not just one.')
+        install_file(options.oidc_key_file, options.oidc_dst_key_file)
+        install_file(options.oidc_cert_file, options.oidc_dst_cert_file)
+    else:
+        subject = options.oidc_hostname
+        key, cert = generate_cert(subject)
+        install_file_from_data(key, options.oidc_dst_key_file)
+        install_file_from_data(cert, options.oidc_dst_cert_file)
+
 # ---------------------------- Template Builders ------------------------------
 
 
@@ -854,12 +868,12 @@ def build_oidc_sp_metadata_file(options):
 # ------------ Argparse Argument Conversion/Validation Functions --------------
 
 
-def arg_type_mellon_endpoint(value):
+def arg_type_module_endpoint(value):
     value = value.strip(' /')
     return value
 
 
-def arg_type_mellon_protected_location(value):
+def arg_type_module_protected_location(value):
     if not value.startswith('/'):
         raise argparse.ArgumentTypeError('Location must be absolute '
                                          '(arg="%s")' % value)
@@ -956,6 +970,10 @@ def main():
                        default='/etc/httpd',
                        help='Template location')
 
+    group.add_argument('--module',
+                        choices=['mode_auth_mellon', 'mod_auth_openidc']
+                        help='Select either mod_auth_mellon or mod_auth_openidc')
+
     # ---- Argument Group "Keycloak IdP"  ----
 
     group = parser.add_argument_group('Keycloak IdP')
@@ -1024,7 +1042,7 @@ def main():
                        help='common root ancestor for all mellon endpoints')
 
     group.add_argument('--mellon-endpoint', default='mellon',
-                       type=arg_type_mellon_endpoint,
+                       type=arg_type_module_endpoint,
                        help='Used to form the MellonEndpointPath, e.g. '
                        '{mellon_root}/{mellon_endpoint}.')
 
@@ -1046,22 +1064,30 @@ def main():
                        help='Add SAML OrganizationURL to SP metadata')
 
     group.add_argument('-l', '--mellon-protected-locations', action='append',
-                       type=arg_type_mellon_protected_location, default=[],
+                       type=arg_type_module_protected_location, default=[],
                        help='Web location to protect with Mellon. '
                             'May be specified multiple times')
 
     # ---- Argument Group "OIDC SP" ----
 
-    group.add_argument('--OIDC-root', default='/',
+    group.add_argument('--oidc-root', default='/',
                         help='common root ancestor for all OIDC endpoints')
 
-    group.add_argument('--OIDC-protected-locations', actions='append',
-                        type=arg_type_mellon_protected_location, default=[],
+    group.add_argument('--oidc-protected-locations', actions='append',
+                        type=arg_type_module_protected_location, default=[],
                         help='Web location to protect with OIDC. '
                               'May be specified multiple times')
 
-    group.add_argument('--OIDC-https-port', default=80, type=int,
+    group.add_argument('--oidc-https-port', default=80, type=int,
                         help="SSL/TLS port on mellon-hostname)
+
+    group.add_argument('--oidc-hostname', default=socket.getfqdn(),
+                       help="Machine's fully qualified host name")
+
+    group.add_argument('--oidc-endpoint', default='oidc',
+                       type=arg_type_module_endpoint,
+                       help='Used to form the OIDCEndpointPath, e.g. '
+                       '{oidc_root}/{oidc_endpoint}.')
 
     # ===== Process command line arguments =====
 
@@ -1118,45 +1144,80 @@ def main():
     # ===== Normalize Options =====
 
     options.mellon_root = '/' + options.mellon_root.strip(' /')
+    options.oidc_root = '/' + options.oidc_root.strip(' /')
     options.mellon_endpoint = options.mellon_endpoint.strip(' /')
 
     # ===== Synthesize Derived Options =====
 
-    options.httpd_saml_dir = os.path.join(options.httpd_dir, HTTPD_SAML_DIR)
-    options.httpd_conf_dir = os.path.join(options.httpd_dir, HTTPD_CONF_DIR)
-    options.mellon_httpd_config_filename = \
-        os.path.join(options.httpd_conf_dir,
-                     '{app_name}_mellon_keycloak_{realm}.conf'.format(
-                         app_name=options.app_name,
-                         realm=options.keycloak_realm))
-    options.mellon_sp_metadata_filename = \
-        os.path.join(options.httpd_saml_dir,
-                     '{app_name}_{mellon_metadata}').format(
-                         app_name=options.app_name,
-                         mellon_metadata=MELLON_METADATA)
-    options.mellon_dst_key_file = \
-        os.path.join(options.httpd_saml_dir,
-                     '{app_name}.key'.format(
-                         app_name=options.app_name))
-    options.mellon_dst_cert_file = \
-        os.path.join(options.httpd_saml_dir, '{app_name}.cert'.format(
-            app_name=options.app_name))
-    options.mellon_dst_idp_metadata_file = \
-        os.path.join(options.httpd_saml_dir,
-                     '{app_name}_keycloak_{realm}_idp_metadata.xml'.format(
-                         app_name=options.app_name,
-                         realm=options.keycloak_realm))
-    options.mellon_http_url = \
-        normalize_url('https://{mellon_hostname}:{mellon_https_port}'.format(
-            mellon_hostname=options.mellon_hostname,
-            mellon_https_port=options.mellon_https_port))
-    options.mellon_endpoint_path = join_path(options.mellon_root, options.mellon_endpoint)
+    if options.module == 'mod_auth_mellon':
+        options.httpd_saml_dir = os.path.join(options.httpd_dir, HTTPD_SAML_DIR)
+        options.httpd_conf_dir = os.path.join(options.httpd_dir, HTTPD_CONF_DIR)
+        options.mellon_httpd_config_filename = \
+            os.path.join(options.httpd_conf_dir,
+                         '{app_name}_mellon_keycloak_{realm}.conf'.format(
+                             app_name=options.app_name,
+                             realm=options.keycloak_realm))
+        options.mellon_sp_metadata_filename = \
+            os.path.join(options.httpd_saml_dir,
+                         '{app_name}_{mellon_metadata}').format(
+                             app_name=options.app_name,
+                             mellon_metadata=MELLON_METADATA)
+        options.mellon_dst_key_file = \
+            os.path.join(options.httpd_saml_dir,
+                         '{app_name}.key'.format(
+                             app_name=options.app_name))
+        options.mellon_dst_cert_file = \
+            os.path.join(options.httpd_saml_dir, '{app_name}.cert'.format(
+                app_name=options.app_name))
+        options.mellon_dst_idp_metadata_file = \
+            os.path.join(options.httpd_saml_dir,
+                         '{app_name}_keycloak_{realm}_idp_metadata.xml'.format(
+                             app_name=options.app_name,
+                             realm=options.keycloak_realm))
+        options.mellon_http_url = \
+            normalize_url('https://{mellon_hostname}:{mellon_https_port}'.format(
+                mellon_hostname=options.mellon_hostname,
+                mellon_https_port=options.mellon_https_port))
+        options.mellon_endpoint_path = join_path(options.mellon_root, options.mellon_endpoint)
 
-    if not options.mellon_entity_id:
-        url = urlsplit(options.mellon_http_url)
-        options.mellon_entity_id = urlunsplit((url.scheme, url.netloc,
-                                               join_path(options.mellon_endpoint_path, 'metadata'),
-                                               '', ''))
+        if not options.module_entity_id:
+            url = urlsplit(options.mellon_http_url)
+            options.module_entity_id = urlunsplit((url.scheme, url.netloc,
+                                                   join_path(options.mellon_endpoint_path, 'metadata'),
+                                                   '', ''))
+
+    elif options.module == 'mod_auth_openidc':
+        options.httpd_oidc_dir = os.path.join(options.httpd_dir, HTTPD_SAML_DIR)
+        options.httpd_conf_dir = os.path.join(options.httpd_dir, HTTPD_CONF_DIR)
+        options.mellon_httpd_config_filename = \
+            os.path.join(options.httpd_conf_dir,
+                         '{app_name}_oidc_keycloak_{realm}.conf'.format(
+                             app_name=options.app_name,
+                             realm=options.keycloak_realm))
+        options.oidc_sp_metadata_filename = \
+            os.path.join(options.httpd_oidc_dir,
+                         '{app_name}_{oidc_metadata}').format(
+                             app_name=options.app_name,
+                             oidc_metadata=OIDC_METADATA)
+        options.mellon_dst_cert_file = \
+            os.path.join(options.httpd_oidc_dir, '{app_name}.cert'.format(
+                app_name=options.app_name))
+        options.mellon_dst_idp_metadata_file = \
+            os.path.join(options.httpd_oidc_dir,
+                         '{app_name}_keycloak_{realm}_idp_metadata.xml'.format(
+                             app_name=options.app_name,
+                             realm=options.keycloak_realm))
+        options.oidc_http_url = \
+            normalize_url('https://{oidc_hostname}:{oidc_https_port}'.format(
+                oidc_hostname=options.oidc_hostname,
+                oidc_https_port=options.oidc_https_port))
+        options.oidc_endpoint_path = join_path(options.oidc_root, options.oidc_endpoint)
+
+        if not options.module_entity_id:
+            url = urlsplit(options.oidc_http_url)
+            options.module_entity_id = urlunsplit((url.scheme, url.netloc,
+                                                   join_path(options.oidc_endpoint_path, 'metadata'),
+                                                   '', ''))
 
     # ===== Validate Options =====
 
@@ -1226,7 +1287,10 @@ def main():
 
     try:
         logger.step('Create Directories')
-        mkdir(options.httpd_saml_dir)
+        if options.module == 'mod_auth_mellon':
+            mkdir(options.httpd_saml_dir)
+        elif options.module == 'mod_auth_openidc':
+            mkdir(options.httpd_oidc_dir)
         mkdir(options.httpd_conf_dir)
     except Exception as e:
         if options.show_traceback:
@@ -1252,31 +1316,54 @@ def main():
               file=sys.stderr)
         return STATUS_CONFIGURATION_ERROR
 
-    # ===== Congfigure Mellon  =====
+    if options.module == 'mod_auth_mellon':
+        # ===== Congfigure Mellon  =====
 
-    try:
-        logger.step('Set up Service Provider X509 Certificiates')
-        install_mellon_cert(options)
+        try:
+            logger.step('Set up Service Provider X509 Certificiates')
+            install_mellon_cert(options)
 
-        cert_base64 = load_cert_from_file(options.mellon_dst_cert_file)
-        options.sp_signing_cert = cert_base64
-        options.sp_encryption_cert = cert_base64
+            cert_base64 = load_cert_from_file(options.mellon_dst_cert_file)
+            options.sp_signing_cert = cert_base64
+            options.sp_encryption_cert = cert_base64
 
-        logger.step('Build Mellon httpd config file')
-        mellon_httpd_config = build_mellon_httpd_config_file(options)
-        install_file_from_data(mellon_httpd_config,
-                               options.mellon_httpd_config_filename)
+            logger.step('Build Mellon httpd config file')
+            mellon_httpd_config = build_mellon_httpd_config_file(options)
+            install_file_from_data(mellon_httpd_config,
+                                   options.mellon_httpd_config_filename)
 
-        logger.step('Build Mellon SP metadata file')
-        mellon_sp_metadata = build_mellon_sp_metadata_file(options)
-        install_file_from_data(mellon_sp_metadata,
-                               options.mellon_sp_metadata_filename)
-    except Exception as e:
-        if options.show_traceback:
-            traceback.print_exc()
-        print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
-              file=sys.stderr)
-        return STATUS_OPERATION_ERROR
+            logger.step('Build Mellon SP metadata file')
+            mellon_sp_metadata = build_mellon_sp_metadata_file(options)
+            install_file_from_data(mellon_sp_metadata,
+                                   options.mellon_sp_metadata_filename)
+        except Exception as e:
+            if options.show_traceback:
+                traceback.print_exc()
+            print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
+                  file=sys.stderr)
+            return STATUS_OPERATION_ERROR
+
+    elif options.module == 'mod_auth_openidc':
+        # ===== Configure OIDC =====
+
+        try:
+            logger.step('Set up Service Proivder x509 Certificates')
+            install_oidc_cert(options)
+
+            cert_base64 = load_cert_from_file(options.oidc_dst_cert_file)
+            options.sp_signing_cert = cert_base64
+            options.sp_encryption_cert = cert_base64
+
+            logger.step('Build Mellon httpd config file')
+            oidc_httpd_config = build_oidc_mellon_httpd_config_file(options)
+            install_file_from_data(oidc_httpd_config,
+                                    options.oidc_sp_metadata_filename)
+        except Exception as e:
+            if options.show_traceback:
+                traceback.print_exc()
+                        print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
+                  file=sys.stderr)
+            return STATUS_OPERATION_ERROR
 
     # ===== Configure Keycloak  =====
 
@@ -1301,23 +1388,23 @@ def main():
             logger.info('existing clients in realm %s = [%s]',
                         options.keycloak_realm, ', '.join(client_ids))
 
-            if options.mellon_entity_id in client_ids:
+            if options.module_entity_id in client_ids:
                 if options.force:
                     logger.step('Force delete client on Keycloak server')
-                    logger.info('Delete client "%s"', options.mellon_entity_id)
+                    logger.info('Delete client "%s"', options.module_entity_id)
                     admin_conn.delete_client_by_name(options.keycloak_realm,
-                                                     options.mellon_entity_id)
+                                                     options.module_entity_id)
 
                 else:
                     raise AlreadyExistsError('client "{client_id}" '
                                              'already exists in realm "{realm}". '
                                              'Use --force to replace it.'.format(
-                                                 client_id=options.mellon_entity_id,
+                                                 client_id=options.module_entity_id,
                                                  realm=options.keycloak_realm))
 
         if options.client_originate_method == 'descriptor':
             logger.step('Creating new client from descriptor')
-            logger.info('Create new client "%s"', options.mellon_entity_id)
+            logger.info('Create new client "%s"', options.module_entity_id)
             admin_conn.create_client(options.keycloak_realm,
                                      mellon_sp_metadata)
         elif options.client_originate_method == 'registration':
@@ -1336,17 +1423,21 @@ def main():
                                      "to acquire an initial access token")
 
             logger.step('Creating new client using registration service')
-            logger.info('Register new client "%s"', options.mellon_entity_id)
-
+            logger.info('Register new client "%s"', options.module_entity_id)
             try:
-                anonymous_conn.register_client(initial_access_token,
-                                               options.keycloak_realm,
-                                               mellon_sp_metadata)
+                if options.module = 'mod_auth_mellon':
+                    anonymous_conn.register_client(initial_access_token,
+                                                   options.keycloak_realm,
+                                                   mellon_sp_metadata)
+                elif options.module = 'mod_auth_openidc':
+                    anonymous_conn.register_client(initial_access_token,
+                                                   options.keycloak_realm,
+                                                   oidc_sp_metadata)
             except RESTError as e:
                 if e.error_description == "Client Identifier in use":
                     raise AlreadyExistsError('client "{client_id}" '
                                              'already exists in realm "{realm}"'.format(
-                                                 client_id=options.mellon_entity_id,
+                                                 client_id=options.module_entity_id,
                                                  realm=options.keycloak_realm))
                 else:
                     raise
@@ -1361,7 +1452,7 @@ def main():
             logger.step('Enable saml.force.post.binding')
             update_attrs = {'saml.force.post.binding': True}
             admin_conn.update_client_by_name_attributes(options.keycloak_realm,
-                                                        options.mellon_entity_id,
+                                                        options.module_entity_id,
                                                         update_attrs)
 
             logger.step('Add group attribute mapper to client')
@@ -1369,14 +1460,14 @@ def main():
                 'group list', 'groups',
                 friendly_name='List of groups user is a member of')
             admin_conn.create_client_by_name_protocol_mapper(options.keycloak_realm,
-                                                             options.mellon_entity_id,
+                                                             options.module_entity_id,
                                                              mapper)
 
             logger.step('Add Redirect URIs to client')
             urls = get_sp_assertion_consumer_url(options.mellon_sp_metadata_filename,
-                                                 entity_id=options.mellon_entity_id)
+                                                 entity_id=options.module_entity_id)
             admin_conn.add_client_by_name_redirect_uris(options.keycloak_realm,
-                                                        options.mellon_entity_id,
+                                                        options.module_entity_id,
                                                         urls)
 
         logger.step('Retrieve IdP metadata from Keycloak server')
