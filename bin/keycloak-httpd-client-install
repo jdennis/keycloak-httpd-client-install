@@ -45,12 +45,13 @@ BIN_TIMEOUT = '/usr/bin/timeout'
 
 HTTPD_SAML_DIR = 'saml2'
 HTTPD_CONF_DIR = 'conf.d'
+HTTPD_OID_DIR = 'oidc'
 
 MELLON_METADATA_TEMPLATE = 'sp_metadata.tpl'
 MELLON_METADATA = 'sp_metadata.xml'
 
-OIDC_METADATA_TEMPLATE = 'sp_metadata.tpl'
-OIDC_METADATA = 'sp_metadata.xml'
+OIDC_METADATA_TEMPLATE = 'oidc_metadata.tpl'
+OIDC_METADATA = 'oidc_metadata.json'
 
 MELLON_HTTPD_CONFIG_TEMPLATE = 'mellon_httpd.conf'
 OIDC_MELLON_HTTPD_CONFIG_TEMPLATE = 'oidc_mellon_httpd.conf'
@@ -1187,7 +1188,7 @@ def main():
                                                    '', ''))
 
     elif options.module == 'mod_auth_openidc':
-        options.httpd_oidc_dir = os.path.join(options.httpd_dir, HTTPD_SAML_DIR)
+        options.httpd_oidc_dir = os.path.join(options.httpd_dir, HTTPD_OIDC_DIR)
         options.httpd_conf_dir = os.path.join(options.httpd_dir, HTTPD_CONF_DIR)
         options.mellon_httpd_config_filename = \
             os.path.join(options.httpd_conf_dir,
@@ -1235,14 +1236,24 @@ def main():
                                  "with anonymous authentication")
 
 
-        root = join_path(options.mellon_root, '/')
-        for location in options.mellon_protected_locations:
-            location = join_path(location, '/')
-            if not location.startswith(root):
-                raise ValueError('Invalid protected location "%s" '
-                                 'must be equal to or ancestor of the mellon '
-                                 'root "%s"' % (
-                                     location, root))
+        if options.module == 'mod_auth_mellon'
+            root = join_path(options.mellon_root, '/')
+            for location in options.mellon_protected_locations:
+                location = join_path(location, '/')
+                if not location.startswith(root):
+                    raise ValueError('Invalid protected location "%s" '
+                                     'must be equal to or ancestor of the mellon '
+                                     'root "%s"' % (
+                                         location, root))
+        elif options.module == 'mod_auth_openidc'
+            root = join_path(options.oidc_root, '/')
+            for location in options.oidc_protected_locations:
+                location = join_path(location, '/')
+                if not location.startswith(root):
+                    raise ValueError('Invalid protected location "%s" '
+                                     'must be equal to or ancestor of the oidc '
+                                     'root "%s"' % (
+                                         location, root))
 
     except Exception as e:
         if options.show_traceback:
@@ -1430,7 +1441,7 @@ def main():
                                                    options.keycloak_realm,
                                                    mellon_sp_metadata)
                 elif options.module = 'mod_auth_openidc':
-                    anonymous_conn.register_client(initial_access_token,
+                    anonymous_conn.register_oidc_client(initial_access_token,
                                                    options.keycloak_realm,
                                                    oidc_sp_metadata)
             except RESTError as e:
