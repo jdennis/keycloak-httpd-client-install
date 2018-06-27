@@ -45,7 +45,7 @@ BIN_TIMEOUT = '/usr/bin/timeout'
 
 HTTPD_SAML_DIR = 'saml2'
 HTTPD_CONF_DIR = 'conf.d'
-HTTPD_OID_DIR = 'oidc'
+HTTPD_OIDc_DIR = 'oidc'
 
 MELLON_METADATA_TEMPLATE = 'sp_metadata.tpl'
 MELLON_METADATA = 'sp_metadata.xml'
@@ -972,6 +972,7 @@ def main():
                        help='Template location')
 
     group.add_argument('--module',
+                        required=True,
                         choices=['mode_auth_mellon', 'mod_auth_openidc']
                         help='Select either mod_auth_mellon or mod_auth_openidc')
 
@@ -1188,6 +1189,7 @@ def main():
                                                    '', ''))
 
     elif options.module == 'mod_auth_openidc':
+        # I don't think mod_auth_openidc needs a metadata file
         options.httpd_oidc_dir = os.path.join(options.httpd_dir, HTTPD_OIDC_DIR)
         options.httpd_conf_dir = os.path.join(options.httpd_dir, HTTPD_CONF_DIR)
         options.mellon_httpd_config_filename = \
@@ -1195,11 +1197,13 @@ def main():
                          '{app_name}_oidc_keycloak_{realm}.conf'.format(
                              app_name=options.app_name,
                              realm=options.keycloak_realm))
+        # Don't think this part is needed
         options.oidc_sp_metadata_filename = \
             os.path.join(options.httpd_oidc_dir,
                          '{app_name}_{oidc_metadata}').format(
                              app_name=options.app_name,
                              oidc_metadata=OIDC_METADATA)
+        # --------------------------------------------------
         options.mellon_dst_cert_file = \
             os.path.join(options.httpd_oidc_dir, '{app_name}.cert'.format(
                 app_name=options.app_name))
