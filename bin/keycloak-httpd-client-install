@@ -1091,6 +1091,8 @@ def main():
                        help='Used to form the OIDCEndpointPath, e.g. '
                        '{oidc_root}/{oidc_endpoint}.')
 
+    group.add_argument('--ssl-validate-server', default='off')
+
     # ===== Process command line arguments =====
 
     options = parser.parse_args()
@@ -1192,6 +1194,7 @@ def main():
         # I don't think mod_auth_openidc needs a metadata file
         options.httpd_oidc_dir = os.path.join(options.httpd_dir, HTTPD_OIDC_DIR)
         options.httpd_conf_dir = os.path.join(options.httpd_dir, HTTPD_CONF_DIR)
+        sll_validate_server = options.ssl_vlaidate_server
         options.mellon_httpd_config_filename = \
             os.path.join(options.httpd_conf_dir,
                          '{app_name}_oidc_keycloak_{realm}.conf'.format(
@@ -1369,7 +1372,10 @@ def main():
             options.sp_signing_cert = cert_base64
             options.sp_encryption_cert = cert_base64
 
+            # this is my biggest problem right now.
             logger.step('Build Mellon httpd config file')
+            client_secret = get_client_secret(keycloak_realm, client_id)
+            options.client_secret = client_secret
             oidc_httpd_config = build_oidc_mellon_httpd_config_file(options)
             install_file_from_data(oidc_httpd_config,
                                     options.oidc_sp_metadata_filename)
