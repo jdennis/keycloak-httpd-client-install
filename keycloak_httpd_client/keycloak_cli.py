@@ -380,26 +380,26 @@ class KeycloakREST(object):
         url = GET_OIDC_PROVIDER_METADATA_URL_TEMPLATE.format(
             server=self.server, realm=urlquote(realm_name))
 
-            logger.debug("%s on server %s", cmd_name, self.server)
-            response = self.session.get(url)
-            logger.debug("%s response code: %s %s",
-                            cmd_name, response.status_code, response.reason)
+        logger.debug("%s on server %s", cmd_name, self.server)
+        response = self.session.get(url)
+        logger.debug("%s response code: %s %s",
+                        cmd_name, response.status_code, response.reason)
 
 
-            try:
-                response_json = response.json()
-            except ValueError as e:
-                response_json = None
+        try:
+            response_json = response.json()
+        except ValueError as e:
+            response_json = None
 
-            if response.status_code != request.codes.ok:
-                logger.error("%s error: status= %s (%s) text=%s",
-                            cmd_name, response.status_code, response.reason,
-                            response.text)
-                raise RESTError(response.status_code, response.reason,
-                                response_json, response.text, cmd_name)
+        if response.status_code != request.codes.ok:
+            logger.error("%s error: status= %s (%s) text=%s",
+                        cmd_name, response.status_code, response.reason,
+                        response.text)
+            raise RESTError(response.status_code, response.reason,
+                            response_json, response.text, cmd_name)
 
-            logger.debug("%s response = %s", cmd_name, response.text)
-            return response.text
+        logger.debug("%s response = %s", cmd_name, response.text)
+        return response.text
 
     def get_clients(self, realm_name):
         cmd_name = "get clients in realm '{realm}'".format(realm=realm_name)

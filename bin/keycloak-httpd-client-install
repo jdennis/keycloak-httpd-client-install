@@ -43,18 +43,17 @@ BIN_TIMEOUT = "/usr/bin/timeout"
 DEV_NULL = '/dev/null'
 BIN_TIMEOUT = '/usr/bin/timeout'
 
-HTTPD_SAML_DIR = 'saml2'
+HTTPD_DIR = 'KHCI'
 HTTPD_CONF_DIR = 'conf.d'
-HTTPD_OIDc_DIR = 'oidc'
 
 MELLON_METADATA_TEMPLATE = 'sp_metadata.tpl'
 MELLON_METADATA = 'sp_metadata.xml'
 
 OIDC_METADATA_TEMPLATE = 'oidc_metadata.tpl'
-OIDC_METADATA = 'oidc_metadata.json'
+OIDC_METADATA = 'openidc.conf'
 
 MELLON_HTTPD_CONFIG_TEMPLATE = 'mellon_httpd.conf'
-OIDC_MELLON_HTTPD_CONFIG_TEMPLATE = 'oidc_mellon_httpd.conf'
+OIDC_MELLON_HTTPD_CONFIG_TEMPLATE = 'oidc_httpd.conf'
 
 STATUS_SUCCESS = 0
 STATUS_OPERATION_ERROR = 1
@@ -831,7 +830,7 @@ def install_oidc_cert(options):
         install_file(options.oidc_key_file, options.oidc_dst_key_file)
         install_file(options.oidc_cert_file, options.oidc_dst_cert_file)
     else:
-        subject = options.oidc_hostname
+        subject = options.hostname
         key, cert = generate_cert(subject)
         install_file_from_data(key, options.oidc_dst_key_file)
         install_file_from_data(cert, options.oidc_dst_cert_file)
@@ -941,6 +940,20 @@ def main():
                         required=True,
                         help='name of the web app being protected by mellon')
 
+    parser.add_argument('--hostname', default=socket.getfqdn(),
+                        help="Machine's fully qualified host name")
+
+    parser.add_argument('--module-root', default='/',
+                        help='common root ancestor for all endpoints')
+
+    parser.add_argument('--https-port', default=443, type=int,
+                        help="SLL/TLS port on hostname")
+
+    parser.add_argument('--protected-locations', action='append',
+                        type=arg_type_module_protected_location, default=[],
+                        help='Web location to protect. '
+                              'May be specified multiple times')
+
     parser.add_argument('--force', action='store_true',
                         help='forcefully override safety checks')
 
@@ -973,7 +986,7 @@ def main():
 
     group.add_argument('--module',
                         required=True,
-                        choices=['mode_auth_mellon', 'mod_auth_openidc']
+                        choices=['mod_auth_mellon', 'mod_auth_openidc'],
                         help='Select either mod_auth_mellon or mod_auth_openidc')
 
     # ---- Argument Group "Keycloak IdP"  ----
@@ -1072,19 +1085,23 @@ def main():
 
     # ---- Argument Group "OIDC SP" ----
 
+    group.add_argument('--oidc-key-file',
+                       help='certficate key file')
+
+    group.add_argument('--oidc-cert-file',
+                       help='certficate file')
+
+
     group.add_argument('--oidc-root', default='/',
                         help='common root ancestor for all OIDC endpoints')
 
-    group.add_argument('--oidc-protected-locations', actions='append',
+    group.add_argument('--oidc-protected-locations', action='append',
                         type=arg_type_module_protected_location, default=[],
                         help='Web location to protect with OIDC. '
                               'May be specified multiple times')
 
     group.add_argument('--oidc-https-port', default=80, type=int,
-                        help="SSL/TLS port on mellon-hostname)
-
-    group.add_argument('--oidc-hostname', default=socket.getfqdn(),
-                       help="Machine's fully qualified host name")
+                        help='SSL/TLS port on mellon-hostname')
 
     group.add_argument('--oidc-endpoint', default='oidc',
                        type=arg_type_module_endpoint,
@@ -1146,15 +1163,16 @@ def main():
                          ('keycloak-admin-password'))
 
     # ===== Normalize Options =====
-
-    options.mellon_root = '/' + options.mellon_root.strip(' /')
-    options.oidc_root = '/' + options.oidc_root.strip(' /')
-    options.mellon_endpoint = options.mellon_endpoint.strip(' /')
+    if options.module_root:
+        options.module_root = '/' + options.module_root.strip(' /')
+    else:
+        options.mellon_root = '/' + options.mellon_root.strip(' /')
+        options.mellon_endpoint = options.mellon_endpoint.strip(' /')
 
     # ===== Synthesize Derived Options =====
 
     if options.module == 'mod_auth_mellon':
-        options.httpd_saml_dir = os.path.join(options.httpd_dir, HTTPD_SAML_DIR)
+        options.httpd_dir = os.path.join(options.httpd_dir, HTTPD_DIR)
         options.httpd_conf_dir = os.path.join(options.httpd_dir, HTTPD_CONF_DIR)
         options.mellon_httpd_config_filename = \
             os.path.join(options.httpd_conf_dir,
@@ -1162,19 +1180,19 @@ def main():
                              app_name=options.app_name,
                              realm=options.keycloak_realm))
         options.mellon_sp_metadata_filename = \
-            os.path.join(options.httpd_saml_dir,
+            os.path.join(options.httpd_dir,
                          '{app_name}_{mellon_metadata}').format(
                              app_name=options.app_name,
                              mellon_metadata=MELLON_METADATA)
         options.mellon_dst_key_file = \
-            os.path.join(options.httpd_saml_dir,
+            os.path.join(options.httpd_dir,
                          '{app_name}.key'.format(
                              app_name=options.app_name))
         options.mellon_dst_cert_file = \
-            os.path.join(options.httpd_saml_dir, '{app_name}.cert'.format(
+            os.path.join(options.httpd_dir, '{app_name}.cert'.format(
                 app_name=options.app_name))
         options.mellon_dst_idp_metadata_file = \
-            os.path.join(options.httpd_saml_dir,
+            os.path.join(options.httpd_dir,
                          '{app_name}_keycloak_{realm}_idp_metadata.xml'.format(
                              app_name=options.app_name,
                              realm=options.keycloak_realm))
@@ -1184,17 +1202,17 @@ def main():
                 mellon_https_port=options.mellon_https_port))
         options.mellon_endpoint_path = join_path(options.mellon_root, options.mellon_endpoint)
 
-        if not options.module_entity_id:
+        if not options.mellon_entity_id:
             url = urlsplit(options.mellon_http_url)
-            options.module_entity_id = urlunsplit((url.scheme, url.netloc,
+            options.mellon_entity_id = urlunsplit((url.scheme, url.netloc,
                                                    join_path(options.mellon_endpoint_path, 'metadata'),
                                                    '', ''))
 
     elif options.module == 'mod_auth_openidc':
         # I don't think mod_auth_openidc needs a metadata file
-        options.httpd_oidc_dir = os.path.join(options.httpd_dir, HTTPD_OIDC_DIR)
+        options.httpd_dir = os.path.join(options.httpd_dir, HTTPD_DIR)
         options.httpd_conf_dir = os.path.join(options.httpd_dir, HTTPD_CONF_DIR)
-        sll_validate_server = options.ssl_vlaidate_server
+        #sll_validate_server = options.ssl_vlaidate_server
         options.mellon_httpd_config_filename = \
             os.path.join(options.httpd_conf_dir,
                          '{app_name}_oidc_keycloak_{realm}.conf'.format(
@@ -1202,30 +1220,28 @@ def main():
                              realm=options.keycloak_realm))
         # Don't think this part is needed
         options.oidc_sp_metadata_filename = \
-            os.path.join(options.httpd_oidc_dir,
+            os.path.join(options.httpd_dir,
                          '{app_name}_{oidc_metadata}').format(
                              app_name=options.app_name,
                              oidc_metadata=OIDC_METADATA)
         # --------------------------------------------------
-        options.mellon_dst_cert_file = \
-            os.path.join(options.httpd_oidc_dir, '{app_name}.cert'.format(
+        options.oidc_dst_key_file = \
+            os.path.join(options.httpd_dir,
+                         '{app_name}.key'.format(
+                             app_name=options.app_name))
+        options.oidc_dst_cert_file = \
+            os.path.join(options.httpd_dir, '{app_name}.cert'.format(
                 app_name=options.app_name))
         options.mellon_dst_idp_metadata_file = \
-            os.path.join(options.httpd_oidc_dir,
+            os.path.join(options.httpd_dir,
                          '{app_name}_keycloak_{realm}_idp_metadata.xml'.format(
                              app_name=options.app_name,
                              realm=options.keycloak_realm))
-        options.oidc_http_url = \
+        options.http_url = \
             normalize_url('https://{oidc_hostname}:{oidc_https_port}'.format(
-                oidc_hostname=options.oidc_hostname,
-                oidc_https_port=options.oidc_https_port))
-        options.oidc_endpoint_path = join_path(options.oidc_root, options.oidc_endpoint)
-
-        if not options.module_entity_id:
-            url = urlsplit(options.oidc_http_url)
-            options.module_entity_id = urlunsplit((url.scheme, url.netloc,
-                                                   join_path(options.oidc_endpoint_path, 'metadata'),
-                                                   '', ''))
+                oidc_hostname=options.hostname,
+                oidc_https_port=options.https_port))
+        options.oidc_endpoint_path = join_path(options.module_root, options.oidc_endpoint)
 
     # ===== Validate Options =====
 
@@ -1243,25 +1259,20 @@ def main():
                                  "with anonymous authentication")
 
 
-        if options.module == 'mod_auth_mellon'
-            root = join_path(options.mellon_root, '/')
-            for location in options.mellon_protected_locations:
+        if options.module == 'mod_auth_mellon':
+            if options.module_root and options.protected_locations:
+                root = join_path(options.module_root, '/')
+                protected_locations = options.protected_locations
+            elif options.mellon_root and options.mellon_protected_locations:
+                root = join_path(options.mellon_root, '/')
+                protected_locations = options.mellon_protected_locations
+            for location in protected_locations:
                 location = join_path(location, '/')
                 if not location.startswith(root):
                     raise ValueError('Invalid protected location "%s" '
                                      'must be equal to or ancestor of the mellon '
                                      'root "%s"' % (
                                          location, root))
-        elif options.module == 'mod_auth_openidc'
-            root = join_path(options.oidc_root, '/')
-            for location in options.oidc_protected_locations:
-                location = join_path(location, '/')
-                if not location.startswith(root):
-                    raise ValueError('Invalid protected location "%s" '
-                                     'must be equal to or ancestor of the oidc '
-                                     'root "%s"' % (
-                                         location, root))
-
     except Exception as e:
         if options.show_traceback:
             traceback.print_exc()
@@ -1271,44 +1282,41 @@ def main():
 
     # ===== Establish Keycloak Server Communication =====
 
-    try:
-        logger.step('Connect to Keycloak Server')
-        logger.info('Connecting to Keycloak server "%s"',
-                    options.keycloak_server_url)
-        if options.permit_insecure_transport:
-            os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
-
-        anonymous_conn = keycloak_cli.KeycloakAnonymousConnection(
-            options.keycloak_server_url,
-            options.tls_verify)
-
-        if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
-            admin_conn = keycloak_cli.KeycloakAdminConnection(
-                options.keycloak_server_url,
-                options.keycloak_auth_role,
-                options.keycloak_admin_realm,
-                keycloak_cli.ADMIN_CLIENT_ID,
-                options.keycloak_admin_username,
-                options.keycloak_admin_password,
-                options.tls_verify)
-        else:
-            admin_conn = None
-
-    except Exception as e:
-        if options.show_traceback:
-            traceback.print_exc()
-        print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
-              file=sys.stderr)
-        return STATUS_COMMUNICATION_ERROR
+    # try:
+    #     logger.step('Connect to Keycloak Server')
+    #     logger.info('Connecting to Keycloak server "%s"',
+    #                 options.keycloak_server_url)
+    #     if options.permit_insecure_transport:
+    #         os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+    #
+    #     anonymous_conn = keycloak_cli.KeycloakAnonymousConnection(
+    #         options.keycloak_server_url,
+    #         options.tls_verify)
+    #
+    #     if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+    #         admin_conn = keycloak_cli.KeycloakAdminConnection(
+    #             options.keycloak_server_url,
+    #             options.keycloak_auth_role,
+    #             options.keycloak_admin_realm,
+    #             keycloak_cli.ADMIN_CLIENT_ID,
+    #             options.keycloak_admin_username,
+    #             options.keycloak_admin_password,
+    #             options.tls_verify)
+    #     else:
+    #         admin_conn = None
+    #
+    # except Exception as e:
+    #     if options.show_traceback:
+    #         traceback.print_exc()
+    #     print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
+    #           file=sys.stderr)
+    #     return STATUS_COMMUNICATION_ERROR
 
     # ===== Assure required directories are present =====
 
     try:
         logger.step('Create Directories')
-        if options.module == 'mod_auth_mellon':
-            mkdir(options.httpd_saml_dir)
-        elif options.module == 'mod_auth_openidc':
-            mkdir(options.httpd_oidc_dir)
+        mkdir(options.httpd_dir)
         mkdir(options.httpd_conf_dir)
     except Exception as e:
         if options.show_traceback:
@@ -1326,7 +1334,7 @@ def main():
                                           keep_trailing_newline=True,
                                           undefined=jinja2.StrictUndefined,
                                           loader=jinja2.FileSystemLoader(
-                                              options.template_dir))
+                                              'templates'))
     except Exception as e:
         if options.show_traceback:
             traceback.print_exc()
@@ -1374,139 +1382,139 @@ def main():
 
             # this is my biggest problem right now.
             logger.step('Build Mellon httpd config file')
-            client_secret = get_client_secret(keycloak_realm, client_id)
-            options.client_secret = client_secret
+            ##client_secret = get_client_secret(self.server, keycloak_realm, client_id)
+            ##options.client_secret = client_secret
             oidc_httpd_config = build_oidc_mellon_httpd_config_file(options)
             install_file_from_data(oidc_httpd_config,
                                     options.oidc_sp_metadata_filename)
         except Exception as e:
             if options.show_traceback:
                 traceback.print_exc()
-                        print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
+            print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
                   file=sys.stderr)
             return STATUS_OPERATION_ERROR
 
     # ===== Configure Keycloak  =====
 
-    try:
-        if options.keycloak_auth_role == 'root-admin':
-            logger.step('Query realms from Keycloak server')
-            realms = admin_conn.get_realms()
-            realm_names = keycloak_cli.get_realm_names_from_realms(realms)
-            logger.info('existing realms [%s]', ', '.join(realm_names))
-
-            if options.keycloak_realm not in realm_names:
-                logger.step('Create realm on Keycloak server')
-                logger.info('Create realm "%s"', options.keycloak_realm)
-                admin_conn.create_realm(options.keycloak_realm)
-            else:
-                logger.step('Use existing realm on Keycloak server')
-
-        if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
-            logger.step('Query realm clients from Keycloak server')
-            clients = admin_conn.get_clients(options.keycloak_realm)
-            client_ids = keycloak_cli.get_client_client_ids_from_clients(clients)
-            logger.info('existing clients in realm %s = [%s]',
-                        options.keycloak_realm, ', '.join(client_ids))
-
-            if options.module_entity_id in client_ids:
-                if options.force:
-                    logger.step('Force delete client on Keycloak server')
-                    logger.info('Delete client "%s"', options.module_entity_id)
-                    admin_conn.delete_client_by_name(options.keycloak_realm,
-                                                     options.module_entity_id)
-
-                else:
-                    raise AlreadyExistsError('client "{client_id}" '
-                                             'already exists in realm "{realm}". '
-                                             'Use --force to replace it.'.format(
-                                                 client_id=options.module_entity_id,
-                                                 realm=options.keycloak_realm))
-
-        if options.client_originate_method == 'descriptor':
-            logger.step('Creating new client from descriptor')
-            logger.info('Create new client "%s"', options.module_entity_id)
-            admin_conn.create_client(options.keycloak_realm,
-                                     mellon_sp_metadata)
-        elif options.client_originate_method == 'registration':
-
-            if options.initial_access_token:
-                logger.step('Use provided initial access token')
-                initial_access_token = options.initial_access_token
-            else:
-                if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
-                    logger.step('Get new initial access token')
-                    client_initial_access = admin_conn.get_initial_access_token(
-                        options.keycloak_realm)
-                    initial_access_token = client_initial_access['token']
-                else:
-                    raise ValueError("You must root or realm admin privileges "
-                                     "to acquire an initial access token")
-
-            logger.step('Creating new client using registration service')
-            logger.info('Register new client "%s"', options.module_entity_id)
-            try:
-                if options.module = 'mod_auth_mellon':
-                    anonymous_conn.register_client(initial_access_token,
-                                                   options.keycloak_realm,
-                                                   mellon_sp_metadata)
-                elif options.module = 'mod_auth_openidc':
-                    anonymous_conn.register_oidc_client(initial_access_token,
-                                                   options.keycloak_realm,
-                                                   oidc_sp_metadata)
-            except RESTError as e:
-                if e.error_description == "Client Identifier in use":
-                    raise AlreadyExistsError('client "{client_id}" '
-                                             'already exists in realm "{realm}"'.format(
-                                                 client_id=options.module_entity_id,
-                                                 realm=options.keycloak_realm))
-                else:
-                    raise
-        else:
-            raise ValueError("Unknown client-originate-method = '%s'" %
-                             options.client_originate_method)
-
-
-        if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
-            # Enable Force Post Binding, registration service fails to
-            # to enable it (however creation with client descriptor does)
-            logger.step('Enable saml.force.post.binding')
-            update_attrs = {'saml.force.post.binding': True}
-            admin_conn.update_client_by_name_attributes(options.keycloak_realm,
-                                                        options.module_entity_id,
-                                                        update_attrs)
-
-            logger.step('Add group attribute mapper to client')
-            mapper = admin_conn.new_saml_group_protocol_mapper(
-                'group list', 'groups',
-                friendly_name='List of groups user is a member of')
-            admin_conn.create_client_by_name_protocol_mapper(options.keycloak_realm,
-                                                             options.module_entity_id,
-                                                             mapper)
-
-            logger.step('Add Redirect URIs to client')
-            urls = get_sp_assertion_consumer_url(options.mellon_sp_metadata_filename,
-                                                 entity_id=options.module_entity_id)
-            admin_conn.add_client_by_name_redirect_uris(options.keycloak_realm,
-                                                        options.module_entity_id,
-                                                        urls)
-
-        logger.step('Retrieve IdP metadata from Keycloak server')
-        idp_metadata = anonymous_conn.get_realm_metadata(options.keycloak_realm)
-        install_file_from_data(idp_metadata,
-                               options.mellon_dst_idp_metadata_file)
-
-    except AlreadyExistsError as e:
-        if options.show_traceback:
-            traceback.print_exc()
-        print(six.text_type(e), file=sys.stderr)
-        return STATUS_ALREADY_EXISTS_ERROR
-    except Exception as e:
-        if options.show_traceback:
-            traceback.print_exc()
-        print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
-              file=sys.stderr)
-        return STATUS_OPERATION_ERROR
+    # try:
+    #     if options.keycloak_auth_role == 'root-admin':
+    #         logger.step('Query realms from Keycloak server')
+    #         realms = admin_conn.get_realms()
+    #         realm_names = keycloak_cli.get_realm_names_from_realms(realms)
+    #         logger.info('existing realms [%s]', ', '.join(realm_names))
+    #
+    #         if options.keycloak_realm not in realm_names:
+    #             logger.step('Create realm on Keycloak server')
+    #             logger.info('Create realm "%s"', options.keycloak_realm)
+    #             admin_conn.create_realm(options.keycloak_realm)
+    #         else:
+    #             logger.step('Use existing realm on Keycloak server')
+    #
+    #     if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+    #         logger.step('Query realm clients from Keycloak server')
+    #         clients = admin_conn.get_clients(options.keycloak_realm)
+    #         client_ids = keycloak_cli.get_client_client_ids_from_clients(clients)
+    #         logger.info('existing clients in realm %s = [%s]',
+    #                     options.keycloak_realm, ', '.join(client_ids))
+    #
+    #         if options.module_entity_id in client_ids:
+    #             if options.force:
+    #                 logger.step('Force delete client on Keycloak server')
+    #                 logger.info('Delete client "%s"', options.module_entity_id)
+    #                 admin_conn.delete_client_by_name(options.keycloak_realm,
+    #                                                  options.module_entity_id)
+    #
+    #             else:
+    #                 raise AlreadyExistsError('client "{client_id}" '
+    #                                          'already exists in realm "{realm}". '
+    #                                          'Use --force to replace it.'.format(
+    #                                              client_id=options.module_entity_id,
+    #                                              realm=options.keycloak_realm))
+    #
+    #     if options.client_originate_method == 'descriptor':
+    #         logger.step('Creating new client from descriptor')
+    #         logger.info('Create new client "%s"', options.module_entity_id)
+    #         admin_conn.create_client(options.keycloak_realm,
+    #                                  mellon_sp_metadata)
+    #     elif options.client_originate_method == 'registration':
+    #
+    #         if options.initial_access_token:
+    #             logger.step('Use provided initial access token')
+    #             initial_access_token = options.initial_access_token
+    #         else:
+    #             if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+    #                 logger.step('Get new initial access token')
+    #                 client_initial_access = admin_conn.get_initial_access_token(
+    #                     options.keycloak_realm)
+    #                 initial_access_token = client_initial_access['token']
+    #             else:
+    #                 raise ValueError("You must root or realm admin privileges "
+    #                                  "to acquire an initial access token")
+    #
+    #         logger.step('Creating new client using registration service')
+    #         logger.info('Register new client "%s"', options.module_entity_id)
+    #         try:
+    #             if options.module == 'mod_auth_mellon':
+    #                 anonymous_conn.register_client(initial_access_token,
+    #                                                options.keycloak_realm,
+    #                                                mellon_sp_metadata)
+    #             elif options.module == 'mod_auth_openidc':
+    #                 anonymous_conn.register_oidc_client(initial_access_token,
+    #                                                options.keycloak_realm,
+    #                                                oidc_sp_metadata)
+    #         except RESTError as e:
+    #             if e.error_description == "Client Identifier in use":
+    #                 raise AlreadyExistsError('client "{client_id}" '
+    #                                          'already exists in realm "{realm}"'.format(
+    #                                              client_id=options.module_entity_id,
+    #                                              realm=options.keycloak_realm))
+    #             else:
+    #                 raise
+    #     else:
+    #         raise ValueError("Unknown client-originate-method = '%s'" %
+    #                          options.client_originate_method)
+    #
+    #
+    #     if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+    #         # Enable Force Post Binding, registration service fails to
+    #         # to enable it (however creation with client descriptor does)
+    #         logger.step('Enable saml.force.post.binding')
+    #         update_attrs = {'saml.force.post.binding': True}
+    #         admin_conn.update_client_by_name_attributes(options.keycloak_realm,
+    #                                                     options.module_entity_id,
+    #                                                     update_attrs)
+    #
+    #         logger.step('Add group attribute mapper to client')
+    #         mapper = admin_conn.new_saml_group_protocol_mapper(
+    #             'group list', 'groups',
+    #             friendly_name='List of groups user is a member of')
+    #         admin_conn.create_client_by_name_protocol_mapper(options.keycloak_realm,
+    #                                                          options.module_entity_id,
+    #                                                          mapper)
+    #
+    #         logger.step('Add Redirect URIs to client')
+    #         urls = get_sp_assertion_consumer_url(options.mellon_sp_metadata_filename,
+    #                                              entity_id=options.module_entity_id)
+    #         admin_conn.add_client_by_name_redirect_uris(options.keycloak_realm,
+    #                                                     options.module_entity_id,
+    #                                                     urls)
+    #
+    #     logger.step('Retrieve IdP metadata from Keycloak server')
+    #     idp_metadata = anonymous_conn.get_realm_metadata(options.keycloak_realm)
+    #     install_file_from_data(idp_metadata,
+    #                            options.mellon_dst_idp_metadata_file)
+    #
+    # except AlreadyExistsError as e:
+    #     if options.show_traceback:
+    #         traceback.print_exc()
+    #     print(six.text_type(e), file=sys.stderr)
+    #     return STATUS_ALREADY_EXISTS_ERROR
+    # except Exception as e:
+    #     if options.show_traceback:
+    #         traceback.print_exc()
+    #     print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
+    #           file=sys.stderr)
+    #     return STATUS_OPERATION_ERROR
 
     # ===== Wrap Up =====
 

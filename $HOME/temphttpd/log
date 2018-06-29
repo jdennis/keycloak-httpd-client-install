@@ -1,0 +1,21 @@
+2018-06-29 14:26:19,388 keycloak-httpd-client-install STEP: [Step  1] Create Directories
+2018-06-29 14:26:19,388 keycloak-httpd-client-install DEBUG: mkdir pathname="/home/mbeliveau/temphttpd/KHCI" mode=0775
+2018-06-29 14:26:19,389 keycloak-httpd-client-install DEBUG: mkdir pathname="/home/mbeliveau/temphttpd/KHCI/conf.d" mode=0775
+2018-06-29 14:26:19,389 keycloak-httpd-client-install STEP: [Step  2] Set up template environment
+2018-06-29 14:26:19,390 keycloak-httpd-client-install STEP: [Step  3] Set up Service Proivder x509 Certificates
+2018-06-29 14:26:19,394 keycloak-httpd-client-install DEBUG: Starting external process
+2018-06-29 14:26:19,394 keycloak-httpd-client-install DEBUG: args='openssl' 'req' '-x509' '-batch' '-days' '1825' '-newkey' 'rsa:2048' '-nodes' '-subj' '/CN=mbeliveau' '-keyout' '/tmp/tmpJJXzqi/key.pem' '-out' '/tmp/tmpJJXzqi/cert.pem'
+2018-06-29 14:26:19,469 keycloak-httpd-client-install DEBUG: Process finished, return code=0
+2018-06-29 14:26:19,470 keycloak-httpd-client-install DEBUG: stdout=
+2018-06-29 14:26:19,470 keycloak-httpd-client-install DEBUG: stderr=Generating a 2048 bit RSA private key
+......................................+++
+.+++
+writing new private key to '/tmp/tmpJJXzqi/key.pem'
+-----
+
+2018-06-29 14:26:19,470 keycloak-httpd-client-install DEBUG: install_file_from_data dst_file="/home/mbeliveau/temphttpd/KHCI/example_app.key"
+2018-06-29 14:26:19,470 keycloak-httpd-client-install DEBUG: install_file_from_data dst_file="/home/mbeliveau/temphttpd/KHCI/example_app.cert"
+2018-06-29 14:26:19,470 keycloak-httpd-client-install STEP: [Step  4] Build Mellon httpd config file
+2018-06-29 14:26:19,473 keycloak-httpd-client-install DEBUG: install_file_from_data dst_file="/home/mbeliveau/temphttpd/KHCI/example_app_openidc.conf"
+2018-06-29 14:26:19,473 keycloak-httpd-client-install STEP: [Step  5] Completed Successfully
+2018-06-29 14:26:19,473 keycloak-httpd-client-install INFO: mellon entityID="None"
