@@ -1370,11 +1370,19 @@ def main():
             return STATUS_OPERATION_ERROR
 
     elif options.module == 'mod_auth_openidc':
-    #     # ===== Configure OIDC =====
+    #    # ===== Configure OIDC =====
+        try:
             logger.step('Build OIDC SP metadata file')
             oidc_metadata = build_oidc_sp_metadata_file(options)
             install_file_from_data(oidc_metadata,
                                    options.oidc_sp_metadata_filename)
+
+        except Exception as e:
+            if options.show_traceback:
+                traceback.print_exc()
+            print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
+                  file=sys.stderr)
+            return STATUS_OPERATION_ERROR
     #
     #     try:
     #         logger.step('Set up Service Proivder x509 Certificates')
@@ -1466,7 +1474,7 @@ def main():
                                                    options.keycloak_realm,
                                                    oidc_metadata)
             except RESTError as e:
-                if e.error_description =    = "Client Identifier in use":
+                if e.error_description == "Client Identifier in use":
                     raise AlreadyExistsError('client "{client_id}" '
                                              'already exists in realm "{realm}"'.format(
                                                  client_id=options.mellon_entity_id,
