@@ -1416,23 +1416,23 @@ def main():
             logger.info('existing clients in realm %s = [%s]',
                         options.keycloak_realm, ', '.join(client_ids))
 
-            if options.module_entity_id in client_ids:
+            if options.mellon_entity_id in client_ids:
                 if options.force:
                     logger.step('Force delete client on Keycloak server')
-                    logger.info('Delete client "%s"', options.module_entity_id)
+                    logger.info('Delete client "%s"', options.mellon_entity_id)
                     admin_conn.delete_client_by_name(options.keycloak_realm,
-                                                     options.module_entity_id)
+                                                     options.mellon_entity_id)
 
                 else:
                     raise AlreadyExistsError('client "{client_id}" '
                                              'already exists in realm "{realm}". '
                                              'Use --force to replace it.'.format(
-                                                 client_id=options.module_entity_id,
+                                                 client_id=options.mellon_entity_id,
                                                  realm=options.keycloak_realm))
 
         if options.client_originate_method == 'descriptor':
             logger.step('Creating new client from descriptor')
-            logger.info('Create new client "%s"', options.module_entity_id)
+            logger.info('Create new client "%s"', options.mellon_entity_id)
             admin_conn.create_client(options.keycloak_realm,
                                      mellon_sp_metadata)
         elif options.client_originate_method == 'registration':
@@ -1451,7 +1451,7 @@ def main():
                                      "to acquire an initial access token")
 
             logger.step('Creating new client using registration service')
-            logger.info('Register new client "%s"', options.module_entity_id)
+            logger.info('Register new client "%s"', options.mellon_entity_id)
             try:
                 if options.module == 'mod_auth_mellon':
                     anonymous_conn.register_client(initial_access_token,
@@ -1464,7 +1464,7 @@ def main():
                 if e.error_description == "Client Identifier in use":
                     raise AlreadyExistsError('client "{client_id}" '
                                              'already exists in realm "{realm}"'.format(
-                                                 client_id=options.module_entity_id,
+                                                 client_id=options.mellon_entity_id,
                                                  realm=options.keycloak_realm))
                 else:
                     raise
@@ -1479,7 +1479,7 @@ def main():
             logger.step('Enable saml.force.post.binding')
             update_attrs = {'saml.force.post.binding': True}
             admin_conn.update_client_by_name_attributes(options.keycloak_realm,
-                                                        options.module_entity_id,
+                                                        options.mellon_entity_id,
                                                         update_attrs)
 
             logger.step('Add group attribute mapper to client')
@@ -1487,14 +1487,14 @@ def main():
                 'group list', 'groups',
                 friendly_name='List of groups user is a member of')
             admin_conn.create_client_by_name_protocol_mapper(options.keycloak_realm,
-                                                             options.module_entity_id,
+                                                             options.mellon_entity_id,
                                                              mapper)
 
             logger.step('Add Redirect URIs to client')
             urls = get_sp_assertion_consumer_url(options.mellon_sp_metadata_filename,
-                                                 entity_id=options.module_entity_id)
+                                                 entity_id=options.mellon_entity_id)
             admin_conn.add_client_by_name_redirect_uris(options.keycloak_realm,
-                                                        options.module_entity_id,
+                                                        options.mellon_entity_id,
                                                         urls)
 
         logger.step('Retrieve IdP metadata from Keycloak server')
