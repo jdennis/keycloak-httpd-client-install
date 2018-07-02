@@ -620,7 +620,7 @@ class KeycloakREST(object):
 
         return response_json    # ClientRepresentation
 
-    def register_oidc_client(self, initial_access_token, realm_name):
+    def register_oidc_client(self, initial_access_token, realm_name, metadata):
         cmd_name = "register_oidc_client name '{realm}'".format(realm=realm_name)
         url = OIDC_CLIENT_REGRISTRATION_TEMPLATE.format(
             server=self.server, realm=urlquote(realm_name))
@@ -633,7 +633,7 @@ class KeycloakREST(object):
             headers['Authorization'] = 'Bearer {token}'.format(
                 token=initial_access_token)
 
-        response = self.session.post(url, headers=headers)
+        response = self.session.post(url, headers=headers, data=metadata)
         logger.debug("%s response code: %s %s",
                         cmd_name, response.status_code, response.reason)
 

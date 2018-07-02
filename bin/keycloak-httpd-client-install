@@ -50,7 +50,7 @@ MELLON_METADATA_TEMPLATE = 'sp_metadata.tpl'
 MELLON_METADATA = 'sp_metadata.xml'
 
 OIDC_METADATA_TEMPLATE = 'oidc_metadata.tpl'
-OIDC_METADATA = 'openidc.conf'
+OIDC_METADATA = 'oidc_metadata.json'
 
 MELLON_HTTPD_CONFIG_TEMPLATE = 'mellon_httpd.conf'
 OIDC_MELLON_HTTPD_CONFIG_TEMPLATE = 'oidc_httpd.conf'
@@ -1369,8 +1369,12 @@ def main():
                   file=sys.stderr)
             return STATUS_OPERATION_ERROR
 
-    # elif options.module == 'mod_auth_openidc':
+    elif options.module == 'mod_auth_openidc':
     #     # ===== Configure OIDC =====
+            logger.step('Build OIDC SP metadata file')
+            oidc_metadata = build_oidc_sp_metadata_file(options)
+            install_file_from_data(oidc_metadata,
+                                   options.oidc_sp_metadata_filename)
     #
     #     try:
     #         logger.step('Set up Service Proivder x509 Certificates')
@@ -1385,7 +1389,7 @@ def main():
     #         options.client_secret = client_secret
     #         oidc_httpd_config = build_oidc_mellon_httpd_config_file(options)
     #         install_file_from_data(oidc_httpd_config,
-    #                                 options.oidc_sp_metadata_filename)
+    #                                 options.oidc_sp_config_filename)
     #     except Exception as e:
     #         if options.show_traceback:
     #             traceback.print_exc()
@@ -1458,10 +1462,11 @@ def main():
                                                    options.keycloak_realm,
                                                    mellon_sp_metadata)
                 elif options.module == 'mod_auth_openidc':
-                    anonymous_conn.register_oidc_client(initial_access_token,
-                                                   options.keycloak_realm)
+                    anonymous_conn.register_oidc_client(initial_a1ccess_token,
+                                                   options.keycloak_realm,
+                                                   oidc_metadata)
             except RESTError as e:
-                if e.error_description == "Client Identifier in use":
+                if e.error_description =    = "Client Identifier in use":
                     raise AlreadyExistsError('client "{client_id}" '
                                              'already exists in realm "{realm}"'.format(
                                                  client_id=options.mellon_entity_id,
