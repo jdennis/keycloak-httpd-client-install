@@ -1243,6 +1243,13 @@ def main():
                 oidc_https_port=options.https_port))
         options.oidc_endpoint_path = join_path(options.module_root, options.oidc_endpoint)
 
+        if not options.mellon_entity_id:
+            url = urlsplit(options.http_url)
+            options.mellon_entity_id = urlunsplit((url.scheme, url.netloc,
+                                                   join_path(options.oidc_endpoint_path, 'metadata'),
+                                                   '', ''))
+
+
     # ===== Validate Options =====
 
     try:
@@ -1383,27 +1390,6 @@ def main():
             print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
                   file=sys.stderr)
             return STATUS_OPERATION_ERROR
-    #
-    #     try:
-    #         logger.step('Set up Service Proivder x509 Certificates')
-    #         install_oidc_cert(options)
-    #
-    #            cert_base64 = load_cert_from_file(options.oidc_dst_cert_file)
-    #         options.sp_signing_cert = cert_base64
-    #         options.sp_encryption_cert = cert_base64
-    #
-    #         logger.step('Build Mellon httpd config file')
-    #         client_secret = keycloak_cli.get_client_secret(self.server, keycloak_realm, client_id)
-    #         options.client_secret = client_secret
-    #         oidc_httpd_config = build_oidc_mellon_httpd_config_file(options)
-    #         install_file_from_data(oidc_httpd_config,
-    #                                 options.oidc_sp_config_filename)
-    #     except Exception as e:
-    #         if options.show_traceback:
-    #             traceback.print_exc()
-    #         print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
-    #               file=sys.stderr)
-    #         return STATUS_OPERATION_ERROR
 
     # ===== Configure Keycloak  =====
 
@@ -1470,7 +1456,7 @@ def main():
                                                    options.keycloak_realm,
                                                    mellon_sp_metadata)
                 elif options.module == 'mod_auth_openidc':
-                    anonymous_conn.register_oidc_client(initial_a1ccess_token,
+                    anonymous_conn.register_oidc_client(initial_access_token,
                                                    options.keycloak_realm,
                                                    oidc_metadata)
             except RESTError as e:
@@ -1489,26 +1475,27 @@ def main():
         if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
             # Enable Force Post Binding, registration service fails to
             # to enable it (however creation with client descriptor does)
-            logger.step('Enable saml.force.post.binding')
-            update_attrs = {'saml.force.post.binding': True}
-            admin_conn.update_client_by_name_attributes(options.keycloak_realm,
-                                                        options.mellon_entity_id,
-                                                        update_attrs)
+            if options.module == "mod_auth_mellon":
+                logger.step('Enable saml.force.post.binding')
+                update_attrs = {'saml.force.post.binding': True}
+                admin_conn.update_client_by_name_attributes(options.keycloak_realm,
+                                                            options.mellon_entity_id,
+                                                            update_attrs)
 
-            logger.step('Add group attribute mapper to client')
-            mapper = admin_conn.new_saml_group_protocol_mapper(
-                'group list', 'groups',
-                friendly_name='List of groups user is a member of')
-            admin_conn.create_client_by_name_protocol_mapper(options.keycloak_realm,
-                                                             options.mellon_entity_id,
-                                                             mapper)
+                logger.step('Add group attribute mapper to client')
+                mapper = admin_conn.new_saml_group_protocol_mapper(
+                    'group list', 'groups',
+                    friendly_name='List of groups user is a member of')
+                admin_conn.create_client_by_name_protocol_mapper(options.keycloak_realm,
+                                                                 options.mellon_entity_id,
+                                                                 mapper)
 
-            logger.step('Add Redirect URIs to client')
-            urls = get_sp_assertion_consumer_url(options.mellon_sp_metadata_filename,
-                                                 entity_id=options.mellon_entity_id)
-            admin_conn.add_client_by_name_redirect_uris(options.keycloak_realm,
-                                                        options.mellon_entity_id,
-                                                        urls)
+                logger.step('Add Redirect URIs to client')
+                urls = get_sp_assertion_consumer_url(options.mellon_sp_metadata_filename,
+                                                     entity_id=options.mellon_entity_id)
+                admin_conn.add_client_by_name_redirect_uris(options.keycloak_realm,
+                                                            options.mellon_entity_id,
+                                                            urls)
 
         logger.step('Retrieve IdP metadata from Keycloak server')
         idp_metadata = anonymous_conn.get_realm_metadata(options.keycloak_realm)
@@ -1540,11 +1527,11 @@ def main():
             options.sp_encryption_cert = cert_base64
 
             logger.step('Build Mellon httpd config file')
-            client_secret = keycloak_cli.get_client_secret(self.server, keycloak_realm, client_id)
-            options.client_secret = client_secret
+            #client_secret = keycloak_cli.get_client_secret(self.server, keycloak_realm, client_id)
+            #options.client_secret = client_secret
             oidc_httpd_config = build_oidc_mellon_httpd_config_file(options)
             install_file_from_data(oidc_httpd_config,
-                                    options.oidc_sp_metadata_filename)
+                                    options.mellon_httpd_config_filename)
         except Exception as e:
             if options.show_traceback:
                 traceback.print_exc()
