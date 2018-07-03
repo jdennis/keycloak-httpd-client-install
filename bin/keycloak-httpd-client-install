@@ -955,7 +955,7 @@ def main():
                         help='Web location to protect. '
                               'May be specified multiple times')
 
-    group.add_argument('--module-endpoint', default='module',
+    parser.add_argument('--module-endpoint', default='module',
                        type=arg_type_module_endpoint,
                        help='Used to form the EndpointPath, e.g. '
                        '{module_root}/{module_endpoint}.')
@@ -1092,8 +1092,12 @@ def main():
     # ---- Argument Group "OIDC SP" ----
 
     # both mellon and oidc use this but idk if they should be seperate or not
+    group = parser.add_argument_group('OIDC RP')
 
     group.add_argument('--ssl-validate-server', default='off')
+
+    group.add_argument('--client-uri',
+                        help='URL of the homepage of the Client')
 
     # ===== Process command line arguments =====
 
