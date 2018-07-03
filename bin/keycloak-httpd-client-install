@@ -822,6 +822,7 @@ def install_mellon_cert(options):
         install_file_from_data(key, options.mellon_dst_key_file)
         install_file_from_data(cert, options.mellon_dst_cert_file)
 
+# Probably doesn't need to be made and can just used the mellon one.
 def install_oidc_cert(options):
     if options.oidc_key_file or options.oidc_cert_file:
         if not (options.oidc_key_file and options.oidc_cert_file):
@@ -954,6 +955,11 @@ def main():
                         help='Web location to protect. '
                               'May be specified multiple times')
 
+    group.add_argument('--module-endpoint', default='module',
+                       type=arg_type_module_endpoint,
+                       help='Used to form the EndpointPath, e.g. '
+                       '{module_root}/{module_endpoint}.')
+
     parser.add_argument('--force', action='store_true',
                         help='forcefully override safety checks')
 
@@ -1085,22 +1091,7 @@ def main():
 
     # ---- Argument Group "OIDC SP" ----
 
-
-    group.add_argument('--oidc-root', default='/',
-                        help='common root ancestor for all OIDC endpoints')
-
-    group.add_argument('--oidc-protected-locations', action='append',
-                        type=arg_type_module_protected_location, default=[],
-                        help='Web location to protect with OIDC. '
-                              'May be specified multiple times')
-
-    group.add_argument('--oidc-https-port', default=80, type=int,
-                        help='SSL/TLS port on mellon-hostname')
-
-    group.add_argument('--oidc-endpoint', default='oidc',
-                       type=arg_type_module_endpoint,
-                       help='Used to form the OIDCEndpointPath, e.g. '
-                       '{oidc_root}/{oidc_endpoint}.')
+    # both mellon and oidc use this but idk if they should be seperate or not
 
     group.add_argument('--ssl-validate-server', default='off')
 
@@ -1232,10 +1223,10 @@ def main():
                              app_name=options.app_name,
                              realm=options.keycloak_realm))
         options.http_url = \
-            normalize_url('https://{oidc_hostname}:{oidc_https_port}'.format(
-                oidc_hostname=options.hostname,
-                oidc_https_port=options.https_port))
-        options.oidc_endpoint_path = join_path(options.module_root, options.oidc_endpoint)
+            normalize_url('https://{hostname}:{https_port}'.format(
+                hostname=options.hostname,
+                https_port=options.https_port))
+        options.oidc_endpoint_path = join_path(options.module_root, options.module_endpoint)
 
         if not options.mellon_entity_id:
             url = urlsplit(options.http_url)
@@ -1371,7 +1362,7 @@ def main():
             return STATUS_OPERATION_ERROR
 
     elif options.module == 'mod_auth_openidc':
-    #    # ===== Configure OIDC =====
+    # ===== Build OIDC metadata =====
         try:
             logger.step('Build OIDC SP metadata file')
             oidc_metadata = build_oidc_sp_metadata_file(options)
