@@ -428,33 +428,6 @@ class KeycloakREST(object):
 
         return response_json
 
-    def get_client_secret(self, realm_name, id):
-        cmd_name = "get client secret in realm '{realm}'".format(realm=realm_name)
-        url = CLIENT_SECRET_TEMPLATE.format(
-            server=self.server, realm=urlquote(realm_name), id=urlquote(id))
-
-        logger.debug("%s on server %s", cmd_name, self.server)
-        response = self.session.get(url)
-        logger.debug("%s response code: %s %s",
-                    cmd_name, response.status_code, response.reason)
-
-        try:
-            response_json = response.json()
-        except ValueError as e:
-            response_json = None
-
-        if (not response_json or
-            response.status_code != requests.codes.ok):
-            logger.error("%s error: status=%s (%s) text=%s",
-                         cmd_name, response.status_code, response.reason,
-                         response.text)
-            raise RESTError(response.status_code, response.reason,
-                            response_json, response.text, cmd_name)
-
-        logger.debug("%s response = %s", cmd_name, json_pretty(response.test))
-
-        return response_json
-
     def create_client_secret(self, realm_name, id):
         cmd_name = "get client secret in realm '{realm}'".format(realm=realm_name)
         url = CLIENT_SECRET_TEMPLATE.format(

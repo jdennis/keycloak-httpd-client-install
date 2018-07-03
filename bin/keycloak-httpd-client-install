@@ -1085,29 +1085,6 @@ def main():
 
     # ---- Argument Group "OIDC SP" ----
 
-    group.add_argument('--oidc-key-file',
-                       help='certficate key file')
-
-    group.add_argument('--oidc-cert-file',
-                       help='certficate file')
-
-
-    group.add_argument('--oidc-root', default='/',
-                        help='common root ancestor for all OIDC endpoints')
-
-    group.add_argument('--oidc-protected-locations', action='append',
-                        type=arg_type_module_protected_location, default=[],
-                        help='Web location to protect with OIDC. '
-                              'May be specified multiple times')
-
-    group.add_argument('--oidc-https-port', default=80, type=int,
-                        help='SSL/TLS port on mellon-hostname')
-
-    group.add_argument('--oidc-endpoint', default='oidc',
-                       type=arg_type_module_endpoint,
-                       help='Used to form the OIDCEndpointPath, e.g. '
-                       '{oidc_root}/{oidc_endpoint}.')
-
     group.add_argument('--ssl-validate-server', default='off')
 
     # ===== Process command line arguments =====
@@ -1459,7 +1436,8 @@ def main():
                     response = anonymous_conn.register_oidc_client(initial_access_token,
                                                    options.keycloak_realm,
                                                    oidc_metadata)
-                    option.client_secret = response['client_secret']
+                    options.client_secret = response['client_secret']
+                    options.client_id = response['client_id']
             except RESTError as e:
                 if e.error_description == "Client Identifier in use":
                     raise AlreadyExistsError('client "{client_id}" '
@@ -1528,8 +1506,6 @@ def main():
             options.sp_encryption_cert = cert_base64
 
             logger.step('Build Mellon httpd config file')
-            #client_secret = keycloak_cli.get_client_secret(keycloak_realm, client_id)
-            #options.client_secret = client_secret
             oidc_httpd_config = build_oidc_mellon_httpd_config_file(options)
             install_file_from_data(oidc_httpd_config,
                                     options.mellon_httpd_config_filename)
