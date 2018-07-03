@@ -1219,11 +1219,11 @@ def main():
                              app_name=options.app_name,
                              oidc_metadata=OIDC_METADATA)
         # --------------------------------------------------
-        options.oidc_dst_key_file = \
+        options.mellon_dst_key_file = \
             os.path.join(options.httpd_dir,
                          '{app_name}.key'.format(
                              app_name=options.app_name))
-        options.oidc_dst_cert_file = \
+        options.mellon_dst_cert_file = \
             os.path.join(options.httpd_dir, '{app_name}.cert'.format(
                 app_name=options.app_name))
         options.mellon_dst_idp_metadata_file = \
@@ -1518,7 +1518,7 @@ def main():
             logger.step('Set up Service Proivder x509 Certificates')
             install_mellon_cert(options)
 
-            cert_base64 = load_cert_from_file(options.oidc_dst_cert_file)
+            cert_base64 = load_cert_from_file(options.mellon_dst_cert_file)
             options.sp_signing_cert = cert_base64
             options.sp_encryption_cert = cert_base64
 
