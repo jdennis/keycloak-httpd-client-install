@@ -1085,6 +1085,23 @@ def main():
 
     # ---- Argument Group "OIDC SP" ----
 
+
+    group.add_argument('--oidc-root', default='/',
+                        help='common root ancestor for all OIDC endpoints')
+
+    group.add_argument('--oidc-protected-locations', action='append',
+                        type=arg_type_module_protected_location, default=[],
+                        help='Web location to protect with OIDC. '
+                              'May be specified multiple times')
+
+    group.add_argument('--oidc-https-port', default=80, type=int,
+                        help='SSL/TLS port on mellon-hostname')
+
+    group.add_argument('--oidc-endpoint', default='oidc',
+                       type=arg_type_module_endpoint,
+                       help='Used to form the OIDCEndpointPath, e.g. '
+                       '{oidc_root}/{oidc_endpoint}.')
+
     group.add_argument('--ssl-validate-server', default='off')
 
     # ===== Process command line arguments =====
