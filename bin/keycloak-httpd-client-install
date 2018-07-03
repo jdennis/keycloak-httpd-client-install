@@ -1456,9 +1456,10 @@ def main():
                                                    options.keycloak_realm,
                                                    mellon_sp_metadata)
                 elif options.module == 'mod_auth_openidc':
-                    anonymous_conn.register_oidc_client(initial_access_token,
+                    response = anonymous_conn.register_oidc_client(initial_access_token,
                                                    options.keycloak_realm,
                                                    oidc_metadata)
+                    option.client_secret = response['client_secret']
             except RESTError as e:
                 if e.error_description == "Client Identifier in use":
                     raise AlreadyExistsError('client "{client_id}" '
@@ -1527,7 +1528,7 @@ def main():
             options.sp_encryption_cert = cert_base64
 
             logger.step('Build Mellon httpd config file')
-            #client_secret = keycloak_cli.get_client_secret(self.server, keycloak_realm, client_id)
+            #client_secret = keycloak_cli.get_client_secret(keycloak_realm, client_id)
             #options.client_secret = client_secret
             oidc_httpd_config = build_oidc_mellon_httpd_config_file(options)
             install_file_from_data(oidc_httpd_config,
