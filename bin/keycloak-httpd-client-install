@@ -1204,9 +1204,8 @@ def main():
         #sll_validate_server = options.ssl_vlaidate_server
         options.mellon_httpd_config_filename = \
             os.path.join(options.httpd_conf_dir,
-                         '{app_name}_oidc_keycloak_{realm}.conf'.format(
-                             app_name=options.app_name,
-                             realm=options.keycloak_realm))
+                         '{app_name}_oidc.conf'.format(
+                             app_name=options.app_name))
         # Don't think this part is needed
         options.oidc_sp_metadata_filename = \
             os.path.join(options.httpd_dir,
