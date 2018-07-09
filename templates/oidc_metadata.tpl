@@ -5,8 +5,6 @@
     ["{{ http_url }}{{ location }}/redirect_uri",
      "{{ http_url }}/{{ app_name }}/logged_out.html"],
   "client_name": "{{ mellon_entity_id }}",
-  {% if client_uri %}
   "client_uri": "{{ http_url }}{{ location }}"
-  {% endif %}
 }
 {% endfor %}
