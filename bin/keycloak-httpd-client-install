@@ -1199,7 +1199,7 @@ def main():
 
     elif options.module == 'mod_auth_openidc':
         # I don't think mod_auth_openidc needs a metadata file
-        options.httpd_dir = os.path.join(options.httpd_dir, HTTPD_DIR)
+        #options.httpd_dir = os.path.join(options.httpd_dir, HTTPD_DIR)
         options.httpd_conf_dir = os.path.join(options.httpd_dir, HTTPD_CONF_DIR)
         #sll_validate_server = options.ssl_vlaidate_server
         options.mellon_httpd_config_filename = \
