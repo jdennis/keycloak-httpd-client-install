@@ -1094,7 +1094,7 @@ def main():
     # both mellon and oidc use this but idk if they should be seperate or not
     group = parser.add_argument_group('OIDC RP')
 
-    group.add_argument('--ssl-validate-server', default='off')
+    group.add_argument('--ssl-validate-server', default='Off')
 
     group.add_argument('--client-uri',
                         help='URL of the homepage of the Client')
