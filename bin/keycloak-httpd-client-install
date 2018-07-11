@@ -822,20 +822,6 @@ def install_mellon_cert(options):
         install_file_from_data(key, options.mellon_dst_key_file)
         install_file_from_data(cert, options.mellon_dst_cert_file)
 
-# Probably doesn't need to be made and can just used the mellon one.
-def install_oidc_cert(options):
-    if options.oidc_key_file or options.oidc_cert_file:
-        if not (options.oidc_key_file and options.oidc_cert_file):
-            raise ValueError('You must specify both a cert and key file, '
-                             'not just one.')
-        install_file(options.oidc_key_file, options.oidc_dst_key_file)
-        install_file(options.oidc_cert_file, options.oidc_dst_cert_file)
-    else:
-        subject = options.hostname
-        key, cert = generate_cert(subject)
-        install_file_from_data(key, options.oidc_dst_key_file)
-        install_file_from_data(cert, options.oidc_dst_cert_file)
-
 # ---------------------------- Template Builders ------------------------------
 
 
@@ -847,24 +833,19 @@ def build_template_params(options):
 
 def build_mellon_httpd_config_file(options):
     template_params = build_template_params(options)
-    template = template_env.get_template(MELLON_HTTPD_CONFIG_TEMPLATE)
-    return template.render(template_params)
-
-def build_oidc_mellon_httpd_config_file(options):
-    template_params = build_template_params(options)
-    template = template_env.get_template(OIDC_MELLON_HTTPD_CONFIG_TEMPLATE)
+    if options.module == 'mod_auth_mellon':
+        template = template_env.get_template(MELLON_HTTPD_CONFIG_TEMPLATE)
+    elif options.module == 'mod_auth_openidc':
+        template = template_env.get_template(OIDC_MELLON_HTTPD_CONFIG_TEMPLATE)
     return template.render(template_params)
 
 def build_mellon_sp_metadata_file(options):
     template_params = build_template_params(options)
-    template = template_env.get_template(MELLON_METADATA_TEMPLATE)
+    if options.module == 'mod_auth_mellon':
+        template = template_env.get_template(MELLON_METADATA_TEMPLATE)
+    elif options.module == 'mod_auth_openidc':
+        template = template_env.get_template(OIDC_METADATA_TEMPLATE)
     return template.render(template_params)
-
-def build_oidc_sp_metadata_file(options):
-    template_params = build_template_params(options)
-    template = template_env.get_template(OIDC_METADATA_TEMPLATE)
-    return template.render(template_params)
-
 
 # ------------ Argparse Argument Conversion/Validation Functions --------------
 
@@ -1054,13 +1035,16 @@ def main():
                        help='certficate file')
 
     group.add_argument('--mellon-hostname', default=socket.getfqdn(),
-                       help="Machine's fully qualified host name")
+                       help="Deprecated. Use --hostname instead. '
+                       " Machine's fully qualified host name")
 
     group.add_argument('--mellon-https-port', default=443, type=int,
-                       help="SSL/TLS port on mellon-hostname")
+                       help='Deprecated. Use --https-port instead ''
+                       ' SSL/TLS port on mellon-hostname')
 
     group.add_argument('--mellon-root', default='/',
-                       help='common root ancestor for all mellon endpoints')
+                       help='Deprecated. Use --module-root instead. ''
+                       'common root ancestor for all mellon endpoints')
 
     group.add_argument('--mellon-endpoint', default='mellon',
                        type=arg_type_module_endpoint,
@@ -1086,7 +1070,8 @@ def main():
 
     group.add_argument('-l', '--mellon-protected-locations', action='append',
                        type=arg_type_module_protected_location, default=[],
-                       help='Web location to protect with Mellon. '
+                       help='Deprecated. Use --protected-locations insteadself.
+                       ' Web location to protect with Mellon. '
                             'May be specified multiple times')
 
     # ---- Argument Group "OIDC SP" ----
@@ -1368,7 +1353,7 @@ def main():
     # ===== Build OIDC metadata =====
         try:
             logger.step('Build OIDC SP metadata file')
-            oidc_metadata = build_oidc_sp_metadata_file(options)
+            oidc_metadata = build_mellon_sp_metadata_file(options)
             install_file_from_data(oidc_metadata,
                                    options.oidc_sp_metadata_filename)
 
@@ -1517,7 +1502,7 @@ def main():
             options.sp_encryption_cert = cert_base64
 
             logger.step('Build Mellon httpd config file')
-            oidc_httpd_config = build_oidc_mellon_httpd_config_file(options)
+            oidc_httpd_config = build_mellon_httpd_config_file(options)
             install_file_from_data(oidc_httpd_config,
                                     options.mellon_httpd_config_filename)
         except Exception as e:
