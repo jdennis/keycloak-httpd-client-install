@@ -1030,7 +1030,7 @@ def main():
                        help='certficate file')
 
     group.add_argument('--mellon-hostname', default=socket.getfqdn(),
-                       help="Deprecated. Use --hostname instead. ""
+                       help="Deprecated. Use --hostname instead. "
                        " Machine's fully qualified host name")
 
     group.add_argument('--mellon-https-port', default=443, type=int,
