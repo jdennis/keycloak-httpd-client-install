@@ -1030,15 +1030,15 @@ def main():
                        help='certficate file')
 
     group.add_argument('--mellon-hostname', default=socket.getfqdn(),
-                       help="Deprecated. Use --hostname instead. '
+                       help="Deprecated. Use --hostname instead. ""
                        " Machine's fully qualified host name")
 
     group.add_argument('--mellon-https-port', default=443, type=int,
-                       help='Deprecated. Use --https-port instead ''
+                       help='Deprecated. Use --https-port instead '
                        ' SSL/TLS port on mellon-hostname')
 
     group.add_argument('--mellon-root', default='/',
-                       help='Deprecated. Use --module-root instead. ''
+                       help='Deprecated. Use --module-root instead. '
                        'common root ancestor for all mellon endpoints')
 
     group.add_argument('--mellon-endpoint', default='mellon',
@@ -1065,7 +1065,7 @@ def main():
 
     group.add_argument('-l', '--mellon-protected-locations', action='append',
                        type=arg_type_module_protected_location, default=[],
-                       help='Deprecated. Use --protected-locations insteadself.
+                       help='Deprecated. Use --protected-locations instead '
                        ' Web location to protect with Mellon. '
                             'May be specified multiple times')
 
@@ -1178,28 +1178,16 @@ def main():
                                                    '', ''))
 
     elif options.module == 'mod_auth_openidc':
-        # I don't think mod_auth_openidc needs a metadata file
-        #options.httpd_dir = os.path.join(options.httpd_dir, HTTPD_DIR)
         options.httpd_conf_dir = os.path.join(options.httpd_dir, HTTPD_CONF_DIR)
-        #sll_validate_server = options.ssl_vlaidate_server
         options.mellon_httpd_config_filename = \
             os.path.join(options.httpd_conf_dir,
                          '{app_name}_oidc.conf'.format(
                              app_name=options.app_name))
-        # Don't think this part is needed
         options.oidc_sp_metadata_filename = \
             os.path.join(options.httpd_dir,
                          '{app_name}_{oidc_metadata}').format(
                              app_name=options.app_name,
                              oidc_metadata=OIDC_METADATA)
-        # --------------------------------------------------
-        options.mellon_dst_key_file = \
-            os.path.join(options.httpd_dir,
-                         '{app_name}.key'.format(
-                             app_name=options.app_name))
-        options.mellon_dst_cert_file = \
-            os.path.join(options.httpd_dir, '{app_name}.cert'.format(
-                app_name=options.app_name))
         options.mellon_dst_idp_metadata_file = \
             os.path.join(options.httpd_dir,
                          '{app_name}_keycloak_{realm}_idp_metadata.xml'.format(
@@ -1209,7 +1197,6 @@ def main():
             normalize_url('https://{hostname}:{https_port}'.format(
                 hostname=options.hostname,
                 https_port=options.https_port))
-        options.oidc_endpoint_path = join_path(options.module_root, options.module_endpoint)
 
     # ===== Validate Options =====
 
@@ -1344,7 +1331,6 @@ def main():
             oidc_metadata = build_mellon_sp_metadata_file(options)
             install_file_from_data(oidc_metadata,
                                    options.oidc_sp_metadata_filename)
-
         except Exception as e:
             if options.show_traceback:
                 traceback.print_exc()
@@ -1479,16 +1465,8 @@ def main():
 
     # ==== build OIDC Template =====
     if options.module == 'mod_auth_openidc':
-        # ===== Configure OIDC =====
 
         try:
-            logger.step('Set up Service Proivder x509 Certificates')
-            install_mellon_cert(options)
-
-            cert_base64 = load_cert_from_file(options.mellon_dst_cert_file)
-            options.sp_signing_cert = cert_base64
-            options.sp_encryption_cert = cert_base64
-
             logger.step('Build Mellon httpd config file')
             oidc_httpd_config = build_mellon_httpd_config_file(options)
             install_file_from_data(oidc_httpd_config,
