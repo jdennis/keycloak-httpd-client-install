@@ -597,40 +597,6 @@ class KeycloakREST(object):
 
         return response_json    # ClientRepresentation
 
-    def register_oidc_client(self, initial_access_token, realm_name, metadata):
-        cmd_name = "register_oidc_client name '{realm}'".format(realm=realm_name)
-        url = OIDC_CLIENT_REGRISTRATION_TEMPLATE.format(
-            server=self.server, realm=urlquote(realm_name))
-
-        logger.debug("%s on server %s", cmd_name, self.server)
-
-        headers = {'Content-type': 'application/json'}
-
-        if initial_access_token:
-            headers['Authorization'] = 'Bearer {token}'.format(
-                token=initial_access_token)
-
-        response = self.session.post(url, headers=headers, data=metadata)
-        logger.debug("%s response code: %s %s",
-                        cmd_name, response.status_code, response.reason)
-
-        try:
-            response_json = response.json()
-        except ValueError as e:
-            response_json = None
-
-        if (not response_json or
-            response.status_code != requests.codes.created):
-            logger.error("%s error: status=%s (%s) text=%s",
-                         cmd_name, response.status_code, response.reason,
-                         response.text)
-            raise RESTError(response.status_code, response.reason,
-                            response_json, response.text, cmd_name)
-
-        logger.debug("%s response = %s", cmd_name, json_pretty(response.text))
-
-        return response_json  #ClientResentation
-
     def delete_client_by_name(self, realm_name, client_name):
         id = self.get_client_id_by_name(realm_name, client_name)
         self.delete_client_by_id(realm_name, id)
