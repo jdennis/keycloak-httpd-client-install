@@ -1401,11 +1401,11 @@ def main():
                 if options.module == 'mod_auth_mellon':
                     anonymous_conn.register_client(initial_access_token,
                                                    options.keycloak_realm,
-                                                   mellon_sp_metadata)
+                                                   mellon_sp_metadata, options.module)
                 elif options.module == 'mod_auth_openidc':
-                    response = anonymous_conn.register_oidc_client(initial_access_token,
+                    response = anonymous_conn.register_client(initial_access_token,
                                                    options.keycloak_realm,
-                                                   oidc_metadata)
+                                                   oidc_metadata, options.module)
                     options.client_secret = response['client_secret']
                     options.client_id = response['client_id']
             except RESTError as e:

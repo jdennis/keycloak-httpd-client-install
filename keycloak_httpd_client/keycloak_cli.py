@@ -558,15 +558,19 @@ class KeycloakREST(object):
         self.create_client_from_descriptor(realm_name, descriptor)
         return descriptor
 
-    def register_client(self, initial_access_token, realm_name, metadata):
+    def register_client(self, initial_access_token, realm_name, metadata, module):
         cmd_name = "register_client realm '{realm}'".format(
             realm=realm_name)
-        url = SAML2_CLIENT_REGISTRATION_TEMPLATE.format(
-            server=self.server, realm=urlquote(realm_name))
+        if module == 'mod_auth_mellon':
+            url = SAML2_CLIENT_REGISTRATION_TEMPLATE.format(
+                server=self.server, realm=urlquote(realm_name))
+            headers = {'Content-Type': 'application/xml;charset=utf-8'}
+        elif module == 'mod_auth_openidc':
+            url = OIDC_CLIENT_REGRISTRATION_TEMPLATE.format(
+                server=self.server, realm=urlquote(realm_name))
+            headers = {'Content-type': 'application/json'}
 
         logger.debug("%s on server %s", cmd_name, self.server)
-
-        headers = {'Content-Type': 'application/xml;charset=utf-8'}
 
         if initial_access_token:
             headers['Authorization'] = 'Bearer {token}'.format(
