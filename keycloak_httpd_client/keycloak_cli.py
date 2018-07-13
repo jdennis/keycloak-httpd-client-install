@@ -50,6 +50,8 @@ GET_INITIAL_ACCESS_TOKEN_TEMPLATE = (
     '{server}/auth/admin/realms/{realm}/clients-initial-access')
 SAML2_CLIENT_REGISTRATION_TEMPLATE = (
   '{server}/auth/realms/{realm}/clients-registrations/saml2-entity-descriptor')
+OIDC_CLIENT_REGRISTRATION_TEMPLATE = (
+    '{server}/auth/realms/{realm}/clients-registrations/openid-connect')
 
 GET_CLIENT_PROTOCOL_MAPPERS_TEMPLATE = (
     '{server}/auth/admin/realms/{realm}/clients/{id}/protocol-mappers/models')
@@ -59,6 +61,12 @@ GET_CLIENT_PROTOCOL_MAPPERS_BY_PROTOCOL_TEMPLATE = (
 POST_CLIENT_PROTOCOL_MAPPER_TEMPLATE = (
     '{server}/auth/admin/realms/{realm}/clients/{id}/protocol-mappers/models')
 
+GET_OIDC_PROVIDER_METADATA_URL_TEMPLATE = (
+    '{server}/auth/realms/{realm}/.well-known/openid-configuration')
+
+CLIENT_SECRET_TEMPLATE = (
+    '{server}/auth/admin/realms/{realm}/clients/{id}/client-secret'
+)
 
 ADMIN_CLIENT_ID = 'admin-cli'
 
@@ -367,6 +375,32 @@ class KeycloakREST(object):
         logger.debug("%s response = %s", cmd_name, response.text)
         return response.text
 
+    def get_oidc_metadata(self, realm_name):
+        cmd_name = "get metadata for oidc '{realm}'".format(realm=realm_name)
+        url = GET_OIDC_PROVIDER_METADATA_URL_TEMPLATE.format(
+            server=self.server, realm=urlquote(realm_name))
+
+        logger.debug("%s on server %s", cmd_name, self.server)
+        response = self.session.get(url)
+        logger.debug("%s response code: %s %s",
+                        cmd_name, response.status_code, response.reason)
+
+
+        try:
+            response_json = response.json()
+        except ValueError as e:
+            response_json = None
+
+        if response.status_code != request.codes.ok:
+            logger.error("%s error: status= %s (%s) text=%s",
+                        cmd_name, response.status_code, response.reason,
+                        response.text)
+            raise RESTError(response.status_code, response.reason,
+                            response_json, response.text, cmd_name)
+
+        logger.debug("%s response = %s", cmd_name, response.text)
+        return response.text
+
     def get_clients(self, realm_name):
         cmd_name = "get clients in realm '{realm}'".format(realm=realm_name)
         url = GET_CLIENTS_URL_TEMPLATE.format(
@@ -394,6 +428,25 @@ class KeycloakREST(object):
 
         return response_json
 
+    def create_client_secret(self, realm_name, id):
+        cmd_name = "get client secret in realm '{realm}'".format(realm=realm_name)
+        url = CLIENT_SECRET_TEMPLATE.format(
+            server=self.server, realm=urlquote(realm_name), id=urlquote(id))
+
+        logger.debug("%s on server %s", cmd_name, self.server)
+        response = self.session.post(url)
+        logger.debug("%s response code: %s %s",
+                    cmd_name, response.status_code, response.reason)
+
+        if(not response_json or
+            reponse.status_code != response.codes.ok):
+            logger.errot("%s error: status=%s (%s) text=%s",
+                         cmd_name, response.status_code, response.reason,
+                         response.text)
+            raise RESTError(response.status_code, response.reason,
+                            response_json, response.text, cmd_name)
+
+        logger.debug("%s response = %s", cmd_name, py_json_pretty(response.text))
 
     def get_client_by_id(self, realm_name, id):
         cmd_name = "get client id {id} in realm '{realm}'".format(
@@ -505,15 +558,19 @@ class KeycloakREST(object):
         self.create_client_from_descriptor(realm_name, descriptor)
         return descriptor
 
-    def register_client(self, initial_access_token, realm_name, metadata):
+    def register_client(self, initial_access_token, realm_name, metadata, module):
         cmd_name = "register_client realm '{realm}'".format(
             realm=realm_name)
-        url = SAML2_CLIENT_REGISTRATION_TEMPLATE.format(
-            server=self.server, realm=urlquote(realm_name))
+        if module == 'mod_auth_mellon':
+            url = SAML2_CLIENT_REGISTRATION_TEMPLATE.format(
+                server=self.server, realm=urlquote(realm_name))
+            headers = {'Content-Type': 'application/xml;charset=utf-8'}
+        elif module == 'mod_auth_openidc':
+            url = OIDC_CLIENT_REGRISTRATION_TEMPLATE.format(
+                server=self.server, realm=urlquote(realm_name))
+            headers = {'Content-type': 'application/json'}
 
         logger.debug("%s on server %s", cmd_name, self.server)
-
-        headers = {'Content-Type': 'application/xml;charset=utf-8'}
 
         if initial_access_token:
             headers['Authorization'] = 'Bearer {token}'.format(
@@ -788,6 +845,11 @@ def do_register_client(options, conn):
         options.initial_access_token,
         options.realm_name, metadata)
 
+def do_register_oidc_client(options, conn):
+    metadata = options.metadata.read()
+    client_representation = conn.register_oidc_client(
+        options.initial_access_token,
+        options.realm_name, metadata)
 
 def do_delete_client(options, conn):
     conn.delete_client_by_name(options.realm_name, options.client_name)
@@ -840,7 +902,7 @@ class TlsVerifyAction(argparse.Action):
             verify = False
         else:
             verify = values
-            
+
         setattr(namespace, self.dest, verify)
 
 def main():
