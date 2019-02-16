@@ -3,16 +3,16 @@ from __future__ import print_function
 import argparse
 import inspect
 import json
-from oauthlib.oauth2 import LegacyApplicationClient
 import logging
 import logging.handlers
-from requests_oauthlib import OAuth2Session
 import os
-import requests
-import six
 import sys
 import traceback
 
+from oauthlib.oauth2 import LegacyApplicationClient
+import requests
+from requests_oauthlib import OAuth2Session
+import six
 from six.moves.urllib.parse import quote as urlquote
 from six.moves.urllib.parse import urlparse
 
@@ -25,41 +25,36 @@ AUTH_ROLES = ['root-admin', 'realm-admin', 'anonymous']
 
 LOG_FILE_ROTATION_COUNT = 3
 
-TOKEN_URL_TEMPLATE = (
+URL_OIDC_TOKEN = (
     '{server}/auth/realms/{realm}/protocol/openid-connect/token')
-GET_SERVER_INFO_TEMPLATE = (
+URL_SERVER_INFO = (
     '{server}/auth/admin/serverinfo/')
-GET_REALMS_URL_TEMPLATE = (
+URL_REALMS = (
     '{server}/auth/admin/realms')
-CREATE_REALM_URL_TEMPLATE = (
-    '{server}/auth/admin/realms')
-DELETE_REALM_URL_TEMPLATE = (
+URL_REALMS_REALM = (
     '{server}/auth/admin/realms/{realm}')
-GET_REALM_METADATA_TEMPLATE = (
+URL_REALM_SAML_DESCRIPTOR = (
     '{server}/auth/realms/{realm}/protocol/saml/descriptor')
 
-CLIENT_REPRESENTATION_TEMPLATE = (
+URL_CLIENTS = (
+    '{server}/auth/admin/realms/{realm}/clients')
+URL_CLIENTS_ID = (
     '{server}/auth/admin/realms/{realm}/clients/{id}')
-CLIENT_SECRET_TEMPLATE = (
+URL_CLIENT_SECRET = (
     '{server}/auth/admin/realms/{realm}/clients/{id}/client-secret')
-GET_CLIENTS_URL_TEMPLATE = (
-    '{server}/auth/admin/realms/{realm}/clients')
-CLIENT_DESCRIPTOR_URL_TEMPLATE = (
+URL_CLIENT_DESCRIPTION_CONVERTER = (
     '{server}/auth/admin/realms/{realm}/client-description-converter')
-CREATE_CLIENT_URL_TEMPLATE = (
-    '{server}/auth/admin/realms/{realm}/clients')
 
-GET_INITIAL_ACCESS_TOKEN_TEMPLATE = (
+URL_INITIAL_ACCESS_TOKEN = (
     '{server}/auth/admin/realms/{realm}/clients-initial-access')
-SAML2_CLIENT_REGISTRATION_TEMPLATE = (
-  '{server}/auth/realms/{realm}/clients-registrations/saml2-entity-descriptor')
+URL_CLIENT_REGISTRATION_CLIENT_REPRESENTATION = (
+    '{server}/auth/realms/{realm}/clients-registrations/default')
+URL_CLIENT_REGISTRATION_SAML2 = (
+    '{server}/auth/realms/{realm}/clients-registrations/saml2-entity-descriptor')
+URL_CLIENT_REGISTRATION_OIDC = (
+    '{server}/auth/realms/{realm}/clients-registrations/openid-connect')
 
-GET_CLIENT_PROTOCOL_MAPPERS_TEMPLATE = (
-    '{server}/auth/admin/realms/{realm}/clients/{id}/protocol-mappers/models')
-GET_CLIENT_PROTOCOL_MAPPERS_BY_PROTOCOL_TEMPLATE = (
-    '{server}/auth/admin/realms/{realm}/clients/{id}/protocol-mappers/protocol/{protocol}')
-
-POST_CLIENT_PROTOCOL_MAPPER_TEMPLATE = (
+URL_CLIENT_PROTOCOL_MAPPER_MODEL = (
     '{server}/auth/admin/realms/{realm}/clients/{id}/protocol-mappers/models')
 
 
@@ -70,7 +65,7 @@ ADMIN_CLIENT_ID = 'admin-cli'
 
 class RESTError(Exception):
     def __init__(self, cmd_name, response):
-        super(self, self.__class__).__init__()
+        super(RESTError, self).__init__()
         self.cmd_name = cmd_name
         self.status_code = response.status_code
         self.status_reason = response.reason
@@ -232,7 +227,7 @@ class KeycloakREST(object):
     def get_initial_access_token(self, realm_name):
         cmd_name = "get initial access token for realm '{realm}'".format(
             realm=realm_name)
-        url = GET_INITIAL_ACCESS_TOKEN_TEMPLATE.format(
+        url = URL_INITIAL_ACCESS_TOKEN.format(
             server=self.server, realm=urlquote(realm_name))
 
         params = {"expiration": 60,  # seconds
@@ -244,11 +239,11 @@ class KeycloakREST(object):
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if (not response_json or
-            response.status_code != requests.codes.ok):
+                response.status_code != requests.codes.ok):
             raise RESTError(cmd_name, response)
 
         self._log_return_value(response_json)
@@ -256,7 +251,7 @@ class KeycloakREST(object):
 
     def get_server_info(self):
         cmd_name = "get server info"
-        url = GET_SERVER_INFO_TEMPLATE.format(server=self.server)
+        url = URL_SERVER_INFO.format(server=self.server)
 
         self._log_rest_request(cmd_name, url)
         response = self.session.get(url)
@@ -264,11 +259,11 @@ class KeycloakREST(object):
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if (not response_json or
-            response.status_code != requests.codes.ok):
+                response.status_code != requests.codes.ok):
             raise RESTError(cmd_name, response)
 
         self._log_return_value(response_json)
@@ -276,7 +271,7 @@ class KeycloakREST(object):
 
     def get_realms(self):
         cmd_name = "get realms"
-        url = GET_REALMS_URL_TEMPLATE.format(server=self.server)
+        url = URL_REALMS.format(server=self.server)
 
         self._log_rest_request(cmd_name, url)
         response = self.session.get(url)
@@ -284,11 +279,11 @@ class KeycloakREST(object):
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if (not response_json or
-            response.status_code != requests.codes.ok):
+                response.status_code != requests.codes.ok):
             raise RESTError(cmd_name, response)
 
         self._log_return_value(response_json)
@@ -296,7 +291,7 @@ class KeycloakREST(object):
 
     def create_realm(self, realm_name):
         cmd_name = "create realm '{realm}'".format(realm=realm_name)
-        url = CREATE_REALM_URL_TEMPLATE.format(server=self.server)
+        url = URL_REALMS.format(server=self.server)
 
         params = {"enabled": True,
                   "id": realm_name,
@@ -309,7 +304,7 @@ class KeycloakREST(object):
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if response.status_code != requests.codes.created:
@@ -320,7 +315,7 @@ class KeycloakREST(object):
 
     def delete_realm(self, realm_name):
         cmd_name = "delete realm '{realm}'".format(realm=realm_name)
-        url = DELETE_REALM_URL_TEMPLATE.format(
+        url = URL_REALMS_REALM.format(
             server=self.server, realm=urlquote(realm_name))
 
         self._log_rest_request(cmd_name, url)
@@ -329,7 +324,7 @@ class KeycloakREST(object):
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if response.status_code != requests.codes.no_content:
@@ -338,19 +333,14 @@ class KeycloakREST(object):
         self._log_return_value(response_json)
         return response_json
 
-    def get_realm_metadata(self, realm_name):
+    def get_realm_saml_metadata(self, realm_name):
         cmd_name = "get metadata for realm '{realm}'".format(realm=realm_name)
-        url = GET_REALM_METADATA_TEMPLATE.format(
+        url = URL_REALM_SAML_DESCRIPTOR.format(
             server=self.server, realm=urlquote(realm_name))
 
         self._log_rest_request(cmd_name, url)
         response = self.session.get(url)
         self._log_rest_response(cmd_name, response)
-
-        try:
-            response_json = response.json()
-        except ValueError as e:
-            response_json = None
 
         if response.status_code != requests.codes.ok:
             raise RESTError(cmd_name, response)
@@ -360,7 +350,7 @@ class KeycloakREST(object):
 
     def get_clients(self, realm_name):
         cmd_name = "get clients in realm '{realm}'".format(realm=realm_name)
-        url = GET_CLIENTS_URL_TEMPLATE.format(
+        url = URL_CLIENTS.format(
             server=self.server, realm=urlquote(realm_name))
 
         self._log_rest_request(cmd_name, url)
@@ -369,24 +359,24 @@ class KeycloakREST(object):
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if (not response_json or
-            response.status_code != requests.codes.ok):
+                response.status_code != requests.codes.ok):
             raise RESTError(cmd_name, response)
 
         self._log_return_value(response_json)
         return response_json
 
 
-    def get_client_by_name(self, realm_name, client_name):
-        cmd_name = "get client name '{client_name}' in realm '{realm}'".format(
-            client_name=client_name, realm=realm_name)
-        url = GET_CLIENTS_URL_TEMPLATE.format(
+    def get_client_by_clientid(self, realm_name, clientid):
+        cmd_name = "get clientid '{clientid}' in realm '{realm}'".format(
+            clientid=clientid, realm=realm_name)
+        url = URL_CLIENTS.format(
             server=self.server, realm=urlquote(realm_name))
 
-        params = {'clientId': client_name}
+        params = {'clientId': clientid}
 
         self._log_rest_request(cmd_name, url)
         response = self.session.get(url, params=params)
@@ -394,64 +384,63 @@ class KeycloakREST(object):
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if (not response_json or
-            response.status_code != requests.codes.ok):
+                response.status_code != requests.codes.ok):
             raise RESTError(cmd_name, response)
 
         if not isinstance(response_json, list):
             raise TypeError("expected list of client representations"
                             " but got: {data}".format(data=response_json))
 
-        if len(response_json) == 0:
-            raise KeyError('{item} not found'.format(item=client_name))
+        if not response_json:
+            raise KeyError('{item} not found'.format(item=clientid))
 
         if len(response_json) > 1:
             raise ValueError("expected list of client representations"
                              " containing exactly 1 item with"
                              " clientId={clientId})"
                              " but got: {data}".format(data=response_json,
-                                                       clientId=client_name))
+                                                       clientId=clientid))
 
         self._log_return_value(response_json[0])
         return response_json[0]
 
 
-    def get_client_id_by_name(self, realm_name, client_name):
-        client = self.get_client_by_name(realm_name, client_name)
-        id = client.get('id')
-        return id
+    def get_client_id_by_clientid(self, realm_name, clientid):
+        client = self.get_client_by_clientid(realm_name, clientid)
+        return client.get('id')
 
     def get_client_descriptor(self, realm_name, metadata):
         cmd_name = "get client descriptor realm '{realm}'".format(
             realm=realm_name)
-        url = CLIENT_DESCRIPTOR_URL_TEMPLATE.format(
+        url = URL_CLIENT_DESCRIPTION_CONVERTER.format(
             server=self.server, realm=urlquote(realm_name))
 
         headers = {'Content-Type': 'application/xml;charset=utf-8'}
 
-        self._log_rest_request(cmd_name, url, data)
+        self._log_rest_request(cmd_name, url, metadata)
         response = self.session.post(url, headers=headers, data=metadata)
         self._log_rest_response(cmd_name, response)
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if (not response_json or
-            response.status_code != requests.codes.ok):
+                response.status_code != requests.codes.ok):
             raise RESTError(cmd_name, response)
 
         self._log_return_value(response_json)
         return response_json
 
-    def get_client_secret_by_id(self, realm_name, id):
+    def get_client_secret_by_id(self, realm_name, obj_id):
         cmd_name = ("get client secret for client '{id}' in realm '{realm}'".
-                    format(id=id, realm=realm_name))
-        url = CLIENT_SECRET_TEMPLATE.format(
+                    format(id=obj_id, realm=realm_name))
+        url = URL_CLIENT_SECRET.format(
             server=self.server,
             realm=urlquote(realm_name),
             id=urlquote(id))
@@ -462,23 +451,23 @@ class KeycloakREST(object):
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if (not response_json or
-            response.status_code != requests.codes.ok):
+                response.status_code != requests.codes.ok):
             raise RESTError(cmd_name, response)
 
         self._log_return_value(response_json)
         return response_json
 
-    def regenerate_client_secret_by_id(self, realm_name, id):
+    def regenerate_client_secret_by_id(self, realm_name, obj_id):
         cmd_name = ("regenerate client secret for client '{id}' in realm '{realm}'".
-                    format(id=id, realm=realm_name))
-        url = CLIENT_SECRET_TEMPLATE.format(
+                    format(id=obj_id, realm=realm_name))
+        url = URL_CLIENT_SECRET.format(
             server=self.server,
             realm=urlquote(realm_name),
-            id=urlquote(id))
+            id=urlquote(obj_id))
 
         self._log_rest_request(cmd_name, url)
         response = self.session.post(url)
@@ -486,11 +475,11 @@ class KeycloakREST(object):
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if (not response_json or
-            response.status_code != requests.codes.ok):
+                response.status_code != requests.codes.ok):
             raise RESTError(cmd_name, response)
 
         self._log_return_value(response_json)
@@ -500,7 +489,7 @@ class KeycloakREST(object):
         cmd_name = "create client from descriptor "
         "'{client_id}'in realm '{realm}'".format(
             client_id=descriptor['clientId'], realm=realm_name)
-        url = CREATE_CLIENT_URL_TEMPLATE.format(
+        url = URL_CLIENTS.format(
             server=self.server, realm=urlquote(realm_name))
 
         self._log_rest_request(cmd_name, url, descriptor)
@@ -509,7 +498,7 @@ class KeycloakREST(object):
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if response.status_code != requests.codes.created:
@@ -527,7 +516,7 @@ class KeycloakREST(object):
     def register_client(self, initial_access_token, realm_name, metadata):
         cmd_name = "register_client realm '{realm}'".format(
             realm=realm_name)
-        url = SAML2_CLIENT_REGISTRATION_TEMPLATE.format(
+        url = URL_CLIENT_REGISTRATION_SAML2.format(
             server=self.server, realm=urlquote(realm_name))
 
         headers = {'Content-Type': 'application/xml;charset=utf-8'}
@@ -542,28 +531,28 @@ class KeycloakREST(object):
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if (not response_json or
-            response.status_code != requests.codes.created):
+                response.status_code != requests.codes.created):
             raise RESTError(cmd_name, response)
 
         self._log_return_value(response_json)
         return response_json    # ClientRepresentation
 
-    def delete_client_by_name(self, realm_name, client_name):
-        id = self.get_client_id_by_name(realm_name, client_name)
-        self.delete_client_by_id(realm_name, id)
+    def delete_client_by_clientid(self, realm_name, clientid):
+        obj_id = self.get_client_id_by_clientid(realm_name, clientid)
+        self.delete_client_by_id(realm_name, obj_id)
 
 
-    def delete_client_by_id(self, realm_name, id):
+    def delete_client_by_id(self, realm_name, obj_id):
         cmd_name = "delete client id '{id}'in realm '{realm}'".format(
-            id=id, realm=realm_name)
-        url = CLIENT_REPRESENTATION_TEMPLATE.format(
+            id=obj_id, realm=realm_name)
+        url = URL_CLIENTS_ID.format(
             server=self.server,
             realm=urlquote(realm_name),
-            id=urlquote(id))
+            id=urlquote(obj_id))
 
         self._log_rest_request(cmd_name, url)
         response = self.session.delete(url)
@@ -571,7 +560,7 @@ class KeycloakREST(object):
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if response.status_code != requests.codes.no_content:
@@ -581,12 +570,12 @@ class KeycloakREST(object):
         return response_json
 
     def update_client(self, realm_name, client):
-        id = client['id']
-        cmd_name = "update client {id} in realm '{realm}'".format(
-            id=client['clientId'], realm=realm_name)
-        url = CLIENT_REPRESENTATION_TEMPLATE.format(
+        obj_id = client['id']
+        cmd_name = "update client {clientid} in realm '{realm}'".format(
+            clientid=client['clientId'], realm=realm_name)
+        url = URL_CLIENTS_ID.format(
             server=self.server, realm=urlquote(realm_name),
-            id=urlquote(id))
+            id=urlquote(obj_id))
 
         self._log_rest_request(cmd_name, url, client)
         response = self.session.put(url, json=client)
@@ -594,7 +583,7 @@ class KeycloakREST(object):
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if response.status_code != requests.codes.no_content:
@@ -606,17 +595,17 @@ class KeycloakREST(object):
     def update_client_attributes(self, realm_name, client, update_attrs):
         client_id = client['clientId']
         logger.debug("update client attrs: client_id=%s "
-                     "current attrs=%s update=%s" %
-                     (client_id, client['attributes'], update_attrs))
+                     "current attrs=%s update=%s",
+                     client_id, client['attributes'], update_attrs)
         client['attributes'].update(update_attrs)
         logger.debug("update client attrs: client_id=%s "
-                     "new attrs=%s" % (client_id, client['attributes']))
+                     "new attrs=%s", client_id, client['attributes'])
         self.update_client(realm_name, client)
 
 
-    def update_client_by_name_attributes(self, realm_name, client_name,
-                                         update_attrs):
-        client = self.get_client_by_name(realm_name, client_name)
+    def update_client_attributes_by_clientid(self, realm_name, clientid,
+                                             update_attrs):
+        client = self.get_client_by_clientid(realm_name, clientid)
         self.update_client_attributes(realm_name, client, update_attrs)
 
     def new_saml_group_protocol_mapper(self, mapper_name, attribute_name,
@@ -640,16 +629,16 @@ class KeycloakREST(object):
         return mapper
 
     def create_client_protocol_mapper(self, realm_name, client, mapper):
-        id = client['id']
-        cmd_name = ("create protocol-mapper '{mapper_name}' for client {id} "
+        obj_id = client['id']
+        cmd_name = ("create protocol-mapper '{mapper_name}' for clientid {clientid} "
                     "in realm '{realm}'".format(
                         mapper_name=mapper['name'],
-                        id=client['clientId'],
+                        clientid=client['clientId'],
                         realm=realm_name))
-        url = POST_CLIENT_PROTOCOL_MAPPER_TEMPLATE.format(
+        url = URL_CLIENT_PROTOCOL_MAPPER_MODEL.format(
             server=self.server,
             realm=urlquote(realm_name),
-            id=urlquote(id))
+            id=urlquote(obj_id))
 
         self._log_rest_request(cmd_name, url, mapper)
         response = self.session.post(url, json=mapper)
@@ -657,7 +646,7 @@ class KeycloakREST(object):
 
         try:
             response_json = response.json()
-        except ValueError as e:
+        except ValueError:
             response_json = None
 
         if response.status_code != requests.codes.created:
@@ -666,14 +655,14 @@ class KeycloakREST(object):
         self._log_return_value(response_json)
         return response_json
 
-    def create_client_by_name_protocol_mapper(self, realm_name, client_name,
-                                              mapper):
-        client = self.get_client_by_name(realm_name, client_name)
+    def create_client_protocol_mapper_by_clientid(self, realm_name, clientid,
+                                                  mapper):
+        client = self.get_client_by_clientid(realm_name, clientid)
         self.create_client_protocol_mapper(realm_name, client, mapper)
 
 
-    def add_client_by_name_redirect_uris(self, realm_name, client_name, uris):
-        client = self.get_client_by_name(realm_name, client_name)
+    def add_client_redirect_uris_by_clientid(self, realm_name, clientid, uris):
+        client = self.get_client_by_clientid(realm_name, clientid)
 
         uris = set(uris)
         redirect_uris = set(client['redirectUris'])
@@ -681,8 +670,8 @@ class KeycloakREST(object):
         client['redirectUris'] = list(redirect_uris)
         self.update_client(realm_name, client)
 
-    def remove_client_by_name_redirect_uris(self, realm_name, client_name, uris):
-        client = self.get_client_by_name(realm_name, client_name)
+    def remove_client_redirect_uris_by_clientid(self, realm_name, clientid, uris):
+        client = self.get_client_by_clientid(realm_name, clientid)
 
         uris = set(uris)
         redirect_uris = set(client['redirectUris'])
@@ -709,7 +698,7 @@ class KeycloakAdminConnection(KeycloakREST):
         self.session = self._create_session(tls_verify)
 
     def _create_session(self, tls_verify):
-        token_url = TOKEN_URL_TEMPLATE.format(
+        token_url = URL_OIDC_TOKEN.format(
             server=self.server, realm=urlquote(self.realm))
         refresh_url = token_url
 
@@ -764,8 +753,8 @@ def do_delete_realm(options, conn):
     conn.delete_realm(options.realm_name)
 
 
-def do_get_realm_metadata(options, conn):
-    metadata = conn.get_realm_metadata(options.realm_name)
+def do_get_realm_saml_metadata(options, conn):
+    metadata = conn.get_realm_saml_metadata(options.realm_name)
     print(metadata)
 
 
@@ -776,20 +765,20 @@ def do_list_clients(options, conn):
 
 
 def do_show_client(options, conn):
-    client_rep = conn.get_client_by_name(options.realm_name,
-                                         options.client_name)
+    client_rep = conn.get_client_by_clientid(options.realm_name,
+                                             options.clientid)
     print(py_json_pretty(client_rep))
 
 def do_get_client_secret(options, conn):
-    id = conn.get_client_id_by_name(options.realm_name,
-                                    options.client_name)
-    secret = conn.get_client_secret_by_id(options.realm_name, id)
+    obj_id = conn.get_client_id_by_clientid(options.realm_name,
+                                            options.clientid)
+    secret = conn.get_client_secret_by_id(options.realm_name, obj_id)
     print(py_json_pretty(secret))
 
 def do_regenerate_client_secret(options, conn):
-    id = conn.get_client_id_by_name(options.realm_name,
-                                    options.client_name)
-    secret = conn.regenerate_client_secret_by_id(options.realm_name, id)
+    obj_id = conn.get_client_id_by_clientid(options.realm_name,
+                                            options.clientid)
+    secret = conn.regenerate_client_secret_by_id(options.realm_name, obj_id)
     print(py_json_pretty(secret))
 
 def do_create_client(options, conn):
@@ -805,7 +794,7 @@ def do_register_client(options, conn):
 
 
 def do_delete_client(options, conn):
-    conn.delete_client_by_name(options.realm_name, options.client_name)
+    conn.delete_client_by_clientid(options.realm_name, options.clientid)
 
 def do_client_test(options, conn):
     'experimental test code used during development'
@@ -813,7 +802,7 @@ def do_client_test(options, conn):
     uri = 'https://openstack.jdennis.oslab.test:5000/v3/mellon/fooResponse'
 
     conn.remove_client_by_name_redirect_uri(options.realm_name,
-                                            options.client_name,
+                                            options.clientid,
                                             uri)
 
 # ------------------------------------------------------------------------------
@@ -870,9 +859,9 @@ def main():
     result = 0
 
     parser = argparse.ArgumentParser(description='Keycloak REST client',
-                    prog=prog_name,
-                    epilog=verbose_help.format(prog_name=prog_name),
-                    formatter_class=argparse.RawDescriptionHelpFormatter)
+                                     prog=prog_name,
+                                     epilog=verbose_help.format(prog_name=prog_name),
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
 
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='be chatty')
@@ -931,7 +920,8 @@ def main():
 
     # --- server commands ---
     server_parsers = cmd_parsers.add_parser('server',
-                                           help='server commands, use "server -h" to see available commands')
+                                            help='server commands, use "server -h" '
+                                            'to see available commands')
     server_sub_parser = server_parsers.add_subparsers(help='server commands')
 
     # --- info
@@ -941,12 +931,13 @@ def main():
 
     # --- realms
     cmd_parser = server_sub_parser.add_parser('realms',
-                                       help='list realm names')
+                                              help='list realm names')
     cmd_parser.set_defaults(func=do_list_realms)
 
     # --- realm commands ---
     realm_parsers = cmd_parsers.add_parser('realm',
-                                           help='realm commands, use "realm -h" to see available commands')
+                                           help='realm commands, use "realm -h" '
+                                           'to see available commands')
     realm_sub_parser = realm_parsers.add_subparsers(help='realm commands')
 
     realm_parsers.add_argument('-r', '--realm-name', required=True,
@@ -954,54 +945,54 @@ def main():
 
     # --- realm create
     cmd_parser = realm_sub_parser.add_parser('create',
-                                       help='create new realm')
+                                             help='create new realm')
     cmd_parser.set_defaults(func=do_create_realm)
 
     # --- realm delete
     cmd_parser = realm_sub_parser.add_parser('delete',
-                                       help='delete existing realm')
+                                             help='delete existing realm')
     cmd_parser.set_defaults(func=do_delete_realm)
 
-    # --- realm metadata
-    cmd_parser = realm_sub_parser.add_parser('metadata',
-                                       help='retrieve realm metadata')
-    cmd_parser.set_defaults(func=do_get_realm_metadata)
+    # --- realm saml-metadata
+    cmd_parser = realm_sub_parser.add_parser('saml-metadata',
+                                             help='retrieve realm SAML metadata')
+    cmd_parser.set_defaults(func=do_get_realm_saml_metadata)
 
     # --- client commands ---
     client_parsers = cmd_parsers.add_parser('client',
-                                           help='client operations')
+                                            help='client operations')
     client_sub_parser = client_parsers.add_subparsers(help='client commands')
 
 
     client_parsers.add_argument('-r', '--realm-name', required=True,
                                 help='realm name')
 
-    client_parsers.add_argument('-c', '--client-name', required=True,
-                            help='client name')
+    client_parsers.add_argument('-c', '--clientid', required=True,
+                                help='clientid')
 
     # --- client list
     cmd_parser = client_sub_parser.add_parser('list',
-                                       help='list client names')
+                                              help='list clientids')
     cmd_parser.set_defaults(func=do_list_clients)
 
     # --- client show
     cmd_parser = client_sub_parser.add_parser('show',
-                                       help='show client representation')
+                                              help='show client representation')
     cmd_parser.set_defaults(func=do_show_client)
 
     # --- client secret show
     cmd_parser = client_sub_parser.add_parser('secret',
-                                       help='show client secret')
+                                              help='show client secret')
     cmd_parser.set_defaults(func=do_get_client_secret)
 
     # --- client secret regenerate
     cmd_parser = client_sub_parser.add_parser('regenerate-secret',
-                                       help='regenerate client secret')
+                                              help='regenerate client secret')
     cmd_parser.set_defaults(func=do_regenerate_client_secret)
 
     # --- client create
     cmd_parser = client_sub_parser.add_parser('create',
-                                       help='create new client')
+                                              help='create new client')
     cmd_parser.add_argument('-m', '--metadata', type=argparse.FileType('rb'),
                             required=True,
                             help='SP metadata file or stdin')
@@ -1009,7 +1000,7 @@ def main():
 
     # --- client register
     cmd_parser = client_sub_parser.add_parser('register',
-                                       help='register new client')
+                                              help='register new client')
     cmd_parser.add_argument('-m', '--metadata', type=argparse.FileType('rb'),
                             required=True,
                             help='SP metadata file or stdin')
@@ -1020,7 +1011,7 @@ def main():
 
     # --- client delete
     cmd_parser = client_sub_parser.add_parser('delete',
-                                       help='delete existing client')
+                                              help='delete existing client')
     cmd_parser.set_defaults(func=do_delete_client)
 
 
@@ -1042,7 +1033,7 @@ def main():
     # 2. Try KEYCLOAK_ADMIN_PASSWORD environment variable
     if options.admin_password is None:
         if (('KEYCLOAK_ADMIN_PASSWORD' in os.environ) and
-            (os.environ['KEYCLOAK_ADMIN_PASSWORD'])):
+                (os.environ['KEYCLOAK_ADMIN_PASSWORD'])):
             options.admin_password = os.environ['KEYCLOAK_ADMIN_PASSWORD']
 
     try:

@@ -5,30 +5,30 @@ from __future__ import print_function
 import argparse
 import base64
 import copy
-from lxml import etree
 import getpass
 import grp
-import jinja2
-from keycloak_httpd_client import keycloak_cli
 import logging
 import logging.handlers
 from collections import namedtuple
 import os
 import pwd
 import re
-from keycloak_httpd_client.keycloak_cli import RESTError
-import requests
 import shutil
-import six
 import socket
 import subprocess
 import sys
 import tempfile
 import traceback
 
-
+import jinja2
+import six
 from six.moves.urllib.parse import quote as urlquote
 from six.moves.urllib.parse import urlsplit, urlunsplit
+
+from lxml import etree
+from keycloak_httpd_client import keycloak_cli
+from keycloak_httpd_client.keycloak_cli import RESTError
+
 
 # ----------------------------- Global Variables ------------------------------
 
@@ -58,7 +58,7 @@ STATUS_INSUFFICIENT_PRIVILEGE = 3
 STATUS_COMMUNICATION_ERROR = 4
 STATUS_ALREADY_EXISTS_ERROR = 5
 
-SAML_PAOS_BINDING='urn:oasis:names:tc:SAML:2.0:bindings:PAOS'
+SAML_PAOS_BINDING = 'urn:oasis:names:tc:SAML:2.0:bindings:PAOS'
 
 # --------------------------- Exception Definitions ---------------------------
 
@@ -177,11 +177,11 @@ def join_path(*args):
 
     for item in args:
         components.extend(item.split('/'))
-        
+
     if components[0]:
         leading_slash = False
     else:
-        leading_slash = True 
+        leading_slash = True
 
     if components[-1]:
         trailing_slash = False
@@ -290,7 +290,7 @@ def run_cmd(args, stdin=None, raiseonerr=True,
 
     arg_string = nolog_replace(' '.join(shell_quote(a) for a in args), nolog)
     logger.debug('Starting external process')
-    logger.debug('args=%s' % arg_string)
+    logger.debug('args=%s', arg_string)
 
     preexec_fn = None
     if runas is not None:
@@ -339,8 +339,8 @@ def run_cmd(args, stdin=None, raiseonerr=True,
     if capture_output and not skip_output:
         stdout = nolog_replace(stdout, nolog)
         stderr = nolog_replace(stderr, nolog)
-        logger.debug('stdout=%s' % stdout)
-        logger.debug('stderr=%s' % stderr)
+        logger.debug('stdout=%s', stdout)
+        logger.debug('stderr=%s', stderr)
 
     if p.returncode != 0 and raiseonerr:
         raise subprocess.CalledProcessError(p.returncode, arg_string, stdout)
@@ -426,7 +426,7 @@ def normalize_url(url, default_scheme='https'):
     fragment = s.fragment
     hostname = s.hostname
     port = s.port
-    
+
     if not scheme:
         scheme = default_scheme
 
@@ -528,8 +528,8 @@ def pem_search(text, start=0):
 
         if begin_pem_type != end_pem_type:
             raise ValueError("beginning & end PEM types do not match "
-                             "(%s != %s)",
-                             begin_pem_type, end_pem_type)
+                             "(%s != %s)" %
+                             (begin_pem_type, end_pem_type))
     else:
         return None
 
@@ -588,7 +588,6 @@ def parse_pem(text, pem_type=None, max_items=None):
     '''
 
     pem_blocks = []
-    result = []
     start = 0
 
     while True:
@@ -646,7 +645,7 @@ def get_sp_assertion_consumer_url(metadata_file, entity_id=None,
         # If entity_id was not supplied locate a unique SPSSODescriptor
         xpath = ('//md:EntityDescriptor/md:SPSSODescriptor')
         sp = root.xpath(xpath, namespaces=namespaces)
-        if len(sp) == 0:
+        if not sp:
             raise ValueError('entity_id not supplied and no '
                              'SPSSODescriptor was found')
         elif len(sp) > 1:
@@ -656,14 +655,14 @@ def get_sp_assertion_consumer_url(metadata_file, entity_id=None,
         xpath = ('ancestor::md:EntityDescriptor')
         ed = sp[0].xpath(xpath, namespaces=namespaces)
 
-        entity_id =  ed[0].attrib['entityID']
+        entity_id = ed[0].attrib['entityID']
 
     else:
         xpath = ('//md:EntityDescriptor[@entityID="{entity_id}"]'
                  '/md:SPSSODescriptor'.format(entity_id=entity_id))
 
         sp = root.xpath(xpath, namespaces=namespaces)
-        if len(sp) == 0:
+        if not sp:
             raise IndexError('SPSSODescriptor with EntityID="{entity_id}" '
                              'not found'.format(entity_id=entity_id))
         elif len(sp) > 1:
@@ -721,10 +720,10 @@ def get_entity_id_from_metadata(metadata_file, role):
                       ds='http://www.w3.org/2000/09/xmldsig#')
 
     root = etree.parse(metadata_file).getroot()
-    
+
     xpath = '//md:EntityDescriptor/md:%s' % role_descriptor
     entity = root.xpath(xpath, namespaces=namespaces)
-    if len(entity) == 0:
+    if not entity:
         raise ValueError('no %s found' % role_descriptor)
     elif len(entity) > 1:
         raise ValueError('multiple EntityDescriptor elements found')
@@ -732,17 +731,17 @@ def get_entity_id_from_metadata(metadata_file, role):
     xpath = ('ancestor::md:EntityDescriptor')
     ed = entity[0].xpath(xpath, namespaces=namespaces)
 
-    entity_id =  ed[0].attrib['entityID']
+    entity_id = ed[0].attrib['entityID']
     return entity_id
 
 # -------------------- Certificate Creation & Installation --------------------
 
 
-def load_cert_from_file(filename, format='base64_text'):
+def load_cert_from_file(filename, data_format='base64_text'):
     '''Load a cert from a file, return as either base64 text or binary.
 
     :param string filename: The input file to read the cert from.
-    :param string format: One of: 'base64_text', 'binary'
+    :param string data_format: One of: 'base64_text', 'binary'
     :returns: cert in requested format
     '''
     with open(filename, 'r') as f:
@@ -750,7 +749,7 @@ def load_cert_from_file(filename, format='base64_text'):
 
     certs = parse_pem(data, 'cert')
 
-    if len(certs) == 0:
+    if not certs:
         raise ValueError('No cert found in {filename}'.format(
             filename=filename))
 
@@ -760,13 +759,13 @@ def load_cert_from_file(filename, format='base64_text'):
                              num_certs=len(certs),
                              filename=filename))
 
-    if format == 'base64_text':
+    if data_format == 'base64_text':
         return certs[0].base64_text
-    if format == 'binary':
+    if data_format == 'binary':
         return certs[0].binary
-    else:
-        raise ValueError('Uknown format "{format}"'.format(
-            format=format))
+
+    raise ValueError('Uknown data_format "{data_format}"'.format(
+        data_format=data_format))
 
 
 def generate_cert(subject):
@@ -797,8 +796,6 @@ def generate_cert(subject):
         with open(cert_file, 'r') as f:
             cert = f.read()
 
-    except Exception:
-        raise
     finally:
         shutil.rmtree(tmpdir)
 
@@ -822,8 +819,8 @@ def install_mellon_cert(options):
 
 
 def build_template_params(options):
-    params = dict([(x, getattr(options, x)) for x in dir(options)
-                   if not x.startswith('_')])
+    params = {x:getattr(options, x) for x in dir(options)
+              if not x.startswith('_')}
     return params
 
 
@@ -883,9 +880,9 @@ def main():
 
     # ===== Command Line Arguments =====
     parser = argparse.ArgumentParser(
-            description='Configure mod_auth_mellon as Keycloak client',
-            prog=prog_name,
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        description='Configure mod_auth_mellon as Keycloak client',
+        prog=prog_name,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     # ---- Common Arguments ----
 
@@ -916,7 +913,7 @@ def main():
     parser.add_argument('--force', action='store_true',
                         help='forcefully override safety checks')
 
-    parser.add_argument('--permit-insecure-transport',  action='store_true',
+    parser.add_argument('--permit-insecure-transport', action='store_true',
                         help='Normally secure transport such as TLS '
                         'is required, defeat this check')
 
@@ -1061,13 +1058,14 @@ def main():
 
         # 1. Try password file
         if options.keycloak_admin_password_file is not None:
-            options.keycloak_admin_password = options.keycloak_admin_password_file.readline().strip()
+            options.keycloak_admin_password = (
+                options.keycloak_admin_password_file.readline().strip())
             options.keycloak_admin_password_file.close()
 
         # 2. Try KEYCLOAK_ADMIN_PASSWORD environment variable
         if options.keycloak_admin_password is None:
             if (('KEYCLOAK_ADMIN_PASSWORD' in os.environ) and
-                (os.environ['KEYCLOAK_ADMIN_PASSWORD'])):
+                    (os.environ['KEYCLOAK_ADMIN_PASSWORD'])):
                 options.keycloak_admin_password = (
                     os.environ['KEYCLOAK_ADMIN_PASSWORD'])
 
@@ -1137,15 +1135,21 @@ def main():
     try:
         if options.keycloak_auth_role == 'anonymous':
             if options.client_originate_method == 'registration':
-                logger.warn("Using client originate method 'registration' with the 'anonymous'\n"
-                            "authentication role disables updating the client configuration after\n"
-                            "registration. You may need to adjust the client configuration manually\n"
-                            "in the Keycloak admin console. Use one of the admin authentication\n"
-                            "roles to permit automated client configuration.\n")
+                logger.warning(
+                    "Using client originate method 'registration' with ""the 'anonymous'\n"
+                    "authentication role disables updating the client configuration after\n"
+                    "registration. You may need to adjust the client configuration manually\n"
+                    "in the Keycloak admin console. Use one of the admin authentication\n"
+                    "roles to permit automated client configuration.\n")
 
-            if not options.initial_access_token:
-                raise ValueError("You must supply an initial access token "
-                                 "with anonymous authentication")
+                if not options.initial_access_token:
+                    raise ValueError("You must supply an initial access token "
+                                     "with anonymous authentication")
+            else:
+                raise ValueError("The anonymous auth-role only supports the registration "
+                                 "client-originate-method, you may not use the %s "
+                                 "client-originate-method with anonymous auth-role" %
+                                 (options.client_originate_method))
 
 
         root = join_path(options.mellon_root, '/')
@@ -1279,8 +1283,8 @@ def main():
                 if options.force:
                     logger.step('Force delete client on Keycloak server')
                     logger.info('Delete client "%s"', options.mellon_entity_id)
-                    admin_conn.delete_client_by_name(options.keycloak_realm,
-                                                     options.mellon_entity_id)
+                    admin_conn.delete_client_by_clientid(options.keycloak_realm,
+                                                         options.mellon_entity_id)
 
                 else:
                     raise AlreadyExistsError('client "{client_id}" '
@@ -1334,27 +1338,27 @@ def main():
             # to enable it (however creation with client descriptor does)
             logger.step('Enable saml.force.post.binding')
             update_attrs = {'saml.force.post.binding': True}
-            admin_conn.update_client_by_name_attributes(options.keycloak_realm,
-                                                        options.mellon_entity_id,
-                                                        update_attrs)
+            admin_conn.update_client_attributes_by_clientid(options.keycloak_realm,
+                                                            options.mellon_entity_id,
+                                                            update_attrs)
 
             logger.step('Add group attribute mapper to client')
             mapper = admin_conn.new_saml_group_protocol_mapper(
                 'group list', 'groups',
                 friendly_name='List of groups user is a member of')
-            admin_conn.create_client_by_name_protocol_mapper(options.keycloak_realm,
-                                                             options.mellon_entity_id,
-                                                             mapper)
+            admin_conn.create_client_protocol_mapper_by_clientid(options.keycloak_realm,
+                                                                 options.mellon_entity_id,
+                                                                 mapper)
 
             logger.step('Add Redirect URIs to client')
             urls = get_sp_assertion_consumer_url(options.mellon_sp_metadata_filename,
                                                  entity_id=options.mellon_entity_id)
-            admin_conn.add_client_by_name_redirect_uris(options.keycloak_realm,
-                                                        options.mellon_entity_id,
-                                                        urls)
+            admin_conn.add_client_redirect_uris_by_clientid(options.keycloak_realm,
+                                                            options.mellon_entity_id,
+                                                            urls)
 
         logger.step('Retrieve IdP metadata from Keycloak server')
-        idp_metadata = anonymous_conn.get_realm_metadata(options.keycloak_realm)
+        idp_metadata = anonymous_conn.get_realm_saml_metadata(options.keycloak_realm)
         install_file_from_data(idp_metadata,
                                options.mellon_dst_idp_metadata_file)
 
@@ -1373,7 +1377,7 @@ def main():
     # ===== Wrap Up =====
 
     logger.step('Completed Successfully')
-    logger.info('mellon entityID="%s"' % options.mellon_entity_id)
+    logger.info('mellon entityID="%s"', options.mellon_entity_id)
     return STATUS_SUCCESS
 
 # -----------------------------------------------------------------------------
