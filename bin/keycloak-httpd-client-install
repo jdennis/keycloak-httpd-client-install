@@ -60,6 +60,8 @@ STATUS_ALREADY_EXISTS_ERROR = 5
 
 SAML_PAOS_BINDING = 'urn:oasis:names:tc:SAML:2.0:bindings:PAOS'
 
+DEFAULT_STAGES = ['mellon', 'keycloak']
+
 # --------------------------- Exception Definitions ---------------------------
 
 
@@ -872,6 +874,50 @@ class DeprecatedPasswordAction(argparse.Action):
         else:
             raise argparse.ArgumentError(self, msg2)
 
+class UniqueNamesAction(argparse.Action):
+    '''Store into dest a set of names.
+    The option may be specified multiple times to build up the set.
+    Or the argument value may contain multiple names seperated by commas and/or spaces.
+    Or a combination of either of the above. For example:
+
+    --foo a --foo b --foo c
+    --foo 'a b c'
+    --foo 'a, b, c'
+    --foo a --foo 'b c'
+
+    All produce namespace.foo={'a', 'b', 'c'}
+
+    If you wish to limit the name to a set of valid names subclass this class
+    and set the class attribute name_choices to a list or set of names.
+    The name_choices class attribute plays the same role as choices but we can't use
+    choices because the test for membership in the choices list occurs before
+    names are split and we can't use nargs because you end up with a set of lists.
+    '''
+    name_choices=None
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        if nargs is not None:
+            raise ValueError("nargs not allowed")
+        super(UniqueNamesAction, self).__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if getattr(namespace, self.dest) is None:
+            setattr(namespace, self.dest, set())
+        for value in re.split('[ \t,]+', values):
+            value = value.strip()
+            if not value:
+                continue
+            if self.name_choices is not None:
+                if value not in self.name_choices:
+                    args = {'value': value,
+                            'choices': ', '.join(map(repr, self.name_choices))}
+                    msg = 'invalid choice: %(value)r (choose from %(choices)s)'
+                    raise argparse.ArgumentError(self, msg % args)
+
+            getattr(namespace, self.dest).add(value)
+
+class StageUniqueNamesAction(UniqueNamesAction):
+    name_choices=['mellon', 'keycloak']
+
 # -----------------------------------------------------------------------------
 
 
@@ -885,6 +931,13 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     # ---- Common Arguments ----
+
+    parser.add_argument('--stages',
+                        action=StageUniqueNamesAction,
+                        help=('Execute one or more stages from choices [mellon, keycloak]. '
+                              'May be specified multiple times to accumulated multiple '
+                              'names or a single argument may contain multiple space or '
+                              'comma separated names'))
 
     parser.add_argument('--no-root-check', dest='root_check',
                         action='store_false',
@@ -1051,6 +1104,9 @@ def main():
 
     # ===== Options requiring special handling =====
 
+    if options.stages is None:
+        options.stages = set(DEFAULT_STAGES)
+
     options.keycloak_admin_password = None
     if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
 
@@ -1170,35 +1226,36 @@ def main():
 
     # ===== Establish Keycloak Server Communication =====
 
-    try:
-        logger.step('Connect to Keycloak Server')
-        logger.info('Connecting to Keycloak server "%s"',
-                    options.keycloak_server_url)
-        if options.permit_insecure_transport:
-            os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+    if 'keycloak' in options.stages:
+        try:
+            logger.step('Connect to Keycloak Server')
+            logger.info('Connecting to Keycloak server "%s"',
+                        options.keycloak_server_url)
+            if options.permit_insecure_transport:
+                os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
-        anonymous_conn = keycloak_cli.KeycloakAnonymousConnection(
-            options.keycloak_server_url,
-            options.tls_verify)
-
-        if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
-            admin_conn = keycloak_cli.KeycloakAdminConnection(
+            anonymous_conn = keycloak_cli.KeycloakAnonymousConnection(
                 options.keycloak_server_url,
-                options.keycloak_auth_role,
-                options.keycloak_admin_realm,
-                keycloak_cli.ADMIN_CLIENT_ID,
-                options.keycloak_admin_username,
-                options.keycloak_admin_password,
                 options.tls_verify)
-        else:
-            admin_conn = None
 
-    except Exception as e:
-        if options.show_traceback:
-            traceback.print_exc()
-        print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
-              file=sys.stderr)
-        return STATUS_COMMUNICATION_ERROR
+            if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+                admin_conn = keycloak_cli.KeycloakAdminConnection(
+                    options.keycloak_server_url,
+                    options.keycloak_auth_role,
+                    options.keycloak_admin_realm,
+                    keycloak_cli.ADMIN_CLIENT_ID,
+                    options.keycloak_admin_username,
+                    options.keycloak_admin_password,
+                    options.tls_verify)
+            else:
+                admin_conn = None
+
+        except Exception as e:
+            if options.show_traceback:
+                traceback.print_exc()
+            print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
+                  file=sys.stderr)
+            return STATUS_COMMUNICATION_ERROR
 
     # ===== Assure required directories are present =====
 
@@ -1232,147 +1289,149 @@ def main():
 
     # ===== Congfigure Mellon  =====
 
-    try:
-        logger.step('Set up Service Provider X509 Certificiates')
-        install_mellon_cert(options)
+    if 'mellon' in options.stages:
+        try:
+            logger.step('Set up Service Provider X509 Certificiates')
+            install_mellon_cert(options)
 
-        cert_base64 = load_cert_from_file(options.mellon_dst_cert_file)
-        options.sp_signing_cert = cert_base64
-        options.sp_encryption_cert = cert_base64
+            cert_base64 = load_cert_from_file(options.mellon_dst_cert_file)
+            options.sp_signing_cert = cert_base64
+            options.sp_encryption_cert = cert_base64
 
-        logger.step('Build Mellon httpd config file')
-        mellon_httpd_config = build_mellon_httpd_config_file(options)
-        install_file_from_data(mellon_httpd_config,
-                               options.mellon_httpd_config_filename)
+            logger.step('Build Mellon httpd config file')
+            mellon_httpd_config = build_mellon_httpd_config_file(options)
+            install_file_from_data(mellon_httpd_config,
+                                   options.mellon_httpd_config_filename)
 
-        logger.step('Build Mellon SP metadata file')
-        mellon_sp_metadata = build_mellon_sp_metadata_file(options)
-        install_file_from_data(mellon_sp_metadata,
-                               options.mellon_sp_metadata_filename)
-    except Exception as e:
-        if options.show_traceback:
-            traceback.print_exc()
-        print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
-              file=sys.stderr)
-        return STATUS_OPERATION_ERROR
+            logger.step('Build Mellon SP metadata file')
+            mellon_sp_metadata = build_mellon_sp_metadata_file(options)
+            install_file_from_data(mellon_sp_metadata,
+                                   options.mellon_sp_metadata_filename)
+        except Exception as e:
+            if options.show_traceback:
+                traceback.print_exc()
+            print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
+                  file=sys.stderr)
+            return STATUS_OPERATION_ERROR
 
     # ===== Configure Keycloak  =====
 
-    try:
-        if options.keycloak_auth_role == 'root-admin':
-            logger.step('Query realms from Keycloak server')
-            realms = admin_conn.get_realms()
-            realm_names = keycloak_cli.get_realm_names_from_realms(realms)
-            logger.info('existing realms [%s]', ', '.join(realm_names))
+    if 'keycloak' in options.stages:
+        try:
+            if options.keycloak_auth_role == 'root-admin':
+                logger.step('Query realms from Keycloak server')
+                realms = admin_conn.get_realms()
+                realm_names = keycloak_cli.get_realm_names_from_realms(realms)
+                logger.info('existing realms [%s]', ', '.join(realm_names))
 
-            if options.keycloak_realm not in realm_names:
-                logger.step('Create realm on Keycloak server')
-                logger.info('Create realm "%s"', options.keycloak_realm)
-                admin_conn.create_realm(options.keycloak_realm)
+                if options.keycloak_realm not in realm_names:
+                    logger.step('Create realm on Keycloak server')
+                    logger.info('Create realm "%s"', options.keycloak_realm)
+                    admin_conn.create_realm(options.keycloak_realm)
+                else:
+                    logger.step('Use existing realm on Keycloak server')
+
+            if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+                logger.step('Query realm clients from Keycloak server')
+                clients = admin_conn.get_clients(options.keycloak_realm)
+                client_ids = keycloak_cli.get_client_client_ids_from_clients(clients)
+                logger.info('existing clients in realm %s = [%s]',
+                            options.keycloak_realm, ', '.join(client_ids))
+
+                if options.mellon_entity_id in client_ids:
+                    if options.force:
+                        logger.step('Force delete client on Keycloak server')
+                        logger.info('Delete client "%s"', options.mellon_entity_id)
+                        admin_conn.delete_client_by_clientid(options.keycloak_realm,
+                                                             options.mellon_entity_id)
+
+                    else:
+                        raise AlreadyExistsError('client "{client_id}" '
+                                                 'already exists in realm "{realm}". '
+                                                 'Use --force to replace it.'.format(
+                                                     client_id=options.mellon_entity_id,
+                                                     realm=options.keycloak_realm))
+
+            if options.client_originate_method == 'descriptor':
+                logger.step('Creating new client from descriptor')
+                logger.info('Create new client "%s"', options.mellon_entity_id)
+                admin_conn.create_client(options.keycloak_realm,
+                                         mellon_sp_metadata)
+            elif options.client_originate_method == 'registration':
+
+                if options.initial_access_token:
+                    logger.step('Use provided initial access token')
+                    initial_access_token = options.initial_access_token
+                else:
+                    if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+                        logger.step('Get new initial access token')
+                        client_initial_access = admin_conn.get_initial_access_token(
+                            options.keycloak_realm)
+                        initial_access_token = client_initial_access['token']
+                    else:
+                        raise ValueError("You must root or realm admin privileges "
+                                         "to acquire an initial access token")
+
+                logger.step('Creating new client using registration service')
+                logger.info('Register new client "%s"', options.mellon_entity_id)
+
+                try:
+                    anonymous_conn.register_client(initial_access_token,
+                                                   options.keycloak_realm,
+                                                   mellon_sp_metadata)
+                except RESTError as e:
+                    if e.error_description == "Client Identifier in use":
+                        raise AlreadyExistsError('client "{client_id}" '
+                                                 'already exists in realm "{realm}"'.format(
+                                                     client_id=options.mellon_entity_id,
+                                                     realm=options.keycloak_realm))
+                    else:
+                        raise
             else:
-                logger.step('Use existing realm on Keycloak server')
-
-        if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
-            logger.step('Query realm clients from Keycloak server')
-            clients = admin_conn.get_clients(options.keycloak_realm)
-            client_ids = keycloak_cli.get_client_client_ids_from_clients(clients)
-            logger.info('existing clients in realm %s = [%s]',
-                        options.keycloak_realm, ', '.join(client_ids))
-
-            if options.mellon_entity_id in client_ids:
-                if options.force:
-                    logger.step('Force delete client on Keycloak server')
-                    logger.info('Delete client "%s"', options.mellon_entity_id)
-                    admin_conn.delete_client_by_clientid(options.keycloak_realm,
-                                                         options.mellon_entity_id)
-
-                else:
-                    raise AlreadyExistsError('client "{client_id}" '
-                                             'already exists in realm "{realm}". '
-                                             'Use --force to replace it.'.format(
-                                                 client_id=options.mellon_entity_id,
-                                                 realm=options.keycloak_realm))
-
-        if options.client_originate_method == 'descriptor':
-            logger.step('Creating new client from descriptor')
-            logger.info('Create new client "%s"', options.mellon_entity_id)
-            admin_conn.create_client(options.keycloak_realm,
-                                     mellon_sp_metadata)
-        elif options.client_originate_method == 'registration':
-
-            if options.initial_access_token:
-                logger.step('Use provided initial access token')
-                initial_access_token = options.initial_access_token
-            else:
-                if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
-                    logger.step('Get new initial access token')
-                    client_initial_access = admin_conn.get_initial_access_token(
-                        options.keycloak_realm)
-                    initial_access_token = client_initial_access['token']
-                else:
-                    raise ValueError("You must root or realm admin privileges "
-                                     "to acquire an initial access token")
-
-            logger.step('Creating new client using registration service')
-            logger.info('Register new client "%s"', options.mellon_entity_id)
-
-            try:
-                anonymous_conn.register_client(initial_access_token,
-                                               options.keycloak_realm,
-                                               mellon_sp_metadata)
-            except RESTError as e:
-                if e.error_description == "Client Identifier in use":
-                    raise AlreadyExistsError('client "{client_id}" '
-                                             'already exists in realm "{realm}"'.format(
-                                                 client_id=options.mellon_entity_id,
-                                                 realm=options.keycloak_realm))
-                else:
-                    raise
-        else:
-            raise ValueError("Unknown client-originate-method = '%s'" %
-                             options.client_originate_method)
+                raise ValueError("Unknown client-originate-method = '%s'" %
+                                 options.client_originate_method)
 
 
-        if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
-            # Enable Force Post Binding, registration service fails to
-            # to enable it (however creation with client descriptor does)
-            logger.step('Enable saml.force.post.binding')
-            update_attrs = {'saml.force.post.binding': True}
-            admin_conn.update_client_attributes_by_clientid(options.keycloak_realm,
-                                                            options.mellon_entity_id,
-                                                            update_attrs)
+            if options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+                # Enable Force Post Binding, registration service fails to
+                # to enable it (however creation with client descriptor does)
+                logger.step('Enable saml.force.post.binding')
+                update_attrs = {'saml.force.post.binding': True}
+                admin_conn.update_client_attributes_by_clientid(options.keycloak_realm,
+                                                                options.mellon_entity_id,
+                                                                update_attrs)
 
-            logger.step('Add group attribute mapper to client')
-            mapper = admin_conn.new_saml_group_protocol_mapper(
-                'group list', 'groups',
-                friendly_name='List of groups user is a member of')
-            admin_conn.create_client_protocol_mapper_by_clientid(options.keycloak_realm,
-                                                                 options.mellon_entity_id,
-                                                                 mapper)
+                logger.step('Add group attribute mapper to client')
+                mapper = admin_conn.new_saml_group_protocol_mapper(
+                    'group list', 'groups',
+                    friendly_name='List of groups user is a member of')
+                admin_conn.create_client_protocol_mapper_by_clientid(options.keycloak_realm,
+                                                                     options.mellon_entity_id,
+                                                                     mapper)
 
-            logger.step('Add Redirect URIs to client')
-            urls = get_sp_assertion_consumer_url(options.mellon_sp_metadata_filename,
-                                                 entity_id=options.mellon_entity_id)
-            admin_conn.add_client_redirect_uris_by_clientid(options.keycloak_realm,
-                                                            options.mellon_entity_id,
-                                                            urls)
+                logger.step('Add Redirect URIs to client')
+                urls = get_sp_assertion_consumer_url(options.mellon_sp_metadata_filename,
+                                                     entity_id=options.mellon_entity_id)
+                admin_conn.add_client_redirect_uris_by_clientid(options.keycloak_realm,
+                                                                options.mellon_entity_id,
+                                                                urls)
 
-        logger.step('Retrieve IdP metadata from Keycloak server')
-        idp_metadata = anonymous_conn.get_realm_saml_metadata(options.keycloak_realm)
-        install_file_from_data(idp_metadata,
-                               options.mellon_dst_idp_metadata_file)
+            logger.step('Retrieve IdP metadata from Keycloak server')
+            idp_metadata = anonymous_conn.get_realm_saml_metadata(options.keycloak_realm)
+            install_file_from_data(idp_metadata,
+                                   options.mellon_dst_idp_metadata_file)
 
-    except AlreadyExistsError as e:
-        if options.show_traceback:
-            traceback.print_exc()
-        print(six.text_type(e), file=sys.stderr)
-        return STATUS_ALREADY_EXISTS_ERROR
-    except Exception as e:
-        if options.show_traceback:
-            traceback.print_exc()
-        print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
-              file=sys.stderr)
-        return STATUS_OPERATION_ERROR
+        except AlreadyExistsError as e:
+            if options.show_traceback:
+                traceback.print_exc()
+            print(six.text_type(e), file=sys.stderr)
+            return STATUS_ALREADY_EXISTS_ERROR
+        except Exception as e:
+            if options.show_traceback:
+                traceback.print_exc()
+            print('%s: %s' % (e.__class__.__name__, six.text_type(e)),
+                  file=sys.stderr)
+            return STATUS_OPERATION_ERROR
 
     # ===== Wrap Up =====
 
