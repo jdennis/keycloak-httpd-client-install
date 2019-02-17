@@ -203,8 +203,8 @@ class KeycloakREST(object):
 
     def _log_rest_response(self, cmd_name, response):
         fname = inspect.stack()[1][3]
-        logger.debug("%s() [%s] response code: %s %s, "
-                     "Content-Length=%s Content-Type=%s",
+        logger.debug('%s() [%s] response code: %s %s, '
+                     'Content-Length=%s Content-Type=%s',
                      fname, cmd_name, response.status_code, response.reason,
                      response.headers.get('Content-Length'),
                      response.headers.get('Content-Type'))
@@ -212,9 +212,9 @@ class KeycloakREST(object):
 
     def _log_rest_request(self, cmd_name, url, data=None):
         fname = inspect.stack()[1][3]
-        logger.debug("%s() [%s] url=%s%s",
+        logger.debug('%s() [%s] url=%s%s',
                      fname, cmd_name, url,
-                     " data=%s" % data if data else "")
+                     ' data=%s' % data if data else '')
 
     def _log_return_value(self, return_value, is_json=True):
         fname = inspect.stack()[1][3]
@@ -222,16 +222,16 @@ class KeycloakREST(object):
             value = py_json_pretty(return_value)
         else:
             value = return_value
-        logger.debug("%s() returns %s", fname, value)
+        logger.debug('%s() returns %s', fname, value)
 
     def get_initial_access_token(self, realm_name):
-        cmd_name = "get initial access token for realm '{realm}'".format(
+        cmd_name = 'get initial access token for realm "{realm}"'.format(
             realm=realm_name)
         url = URL_INITIAL_ACCESS_TOKEN.format(
             server=self.server, realm=urlquote(realm_name))
 
-        params = {"expiration": 60,  # seconds
-                  "count": 1}
+        params = {'expiration': 60,  # seconds
+                  'count': 1}
 
         self._log_rest_request(cmd_name, url, params)
         response = self.session.post(url, json=params)
@@ -250,7 +250,7 @@ class KeycloakREST(object):
         return response_json    # ClientInitialAccessPresentation
 
     def get_server_info(self):
-        cmd_name = "get server info"
+        cmd_name = 'get server info'
         url = URL_SERVER_INFO.format(server=self.server)
 
         self._log_rest_request(cmd_name, url)
@@ -270,7 +270,7 @@ class KeycloakREST(object):
         return response_json
 
     def get_realms(self):
-        cmd_name = "get realms"
+        cmd_name = 'get realms'
         url = URL_REALMS.format(server=self.server)
 
         self._log_rest_request(cmd_name, url)
@@ -290,12 +290,12 @@ class KeycloakREST(object):
         return response_json
 
     def create_realm(self, realm_name):
-        cmd_name = "create realm '{realm}'".format(realm=realm_name)
+        cmd_name = 'create realm "{realm}"'.format(realm=realm_name)
         url = URL_REALMS.format(server=self.server)
 
-        params = {"enabled": True,
-                  "id": realm_name,
-                  "realm": realm_name,
+        params = {'enabled': True,
+                  'id': realm_name,
+                  'realm': realm_name,
                   }
 
         self._log_rest_request(cmd_name, url, params)
@@ -314,7 +314,7 @@ class KeycloakREST(object):
         return response_json
 
     def delete_realm(self, realm_name):
-        cmd_name = "delete realm '{realm}'".format(realm=realm_name)
+        cmd_name = 'delete realm "{realm}"'.format(realm=realm_name)
         url = URL_REALMS_REALM.format(
             server=self.server, realm=urlquote(realm_name))
 
@@ -334,7 +334,7 @@ class KeycloakREST(object):
         return response_json
 
     def get_realm_saml_metadata(self, realm_name):
-        cmd_name = "get metadata for realm '{realm}'".format(realm=realm_name)
+        cmd_name = 'get metadata for realm "{realm}"'.format(realm=realm_name)
         url = URL_REALM_SAML_DESCRIPTOR.format(
             server=self.server, realm=urlquote(realm_name))
 
@@ -349,7 +349,7 @@ class KeycloakREST(object):
         return response.text
 
     def get_clients(self, realm_name):
-        cmd_name = "get clients in realm '{realm}'".format(realm=realm_name)
+        cmd_name = 'get clients in realm "{realm}"'.format(realm=realm_name)
         url = URL_CLIENTS.format(
             server=self.server, realm=urlquote(realm_name))
 
@@ -371,7 +371,7 @@ class KeycloakREST(object):
 
 
     def get_client_by_clientid(self, realm_name, clientid):
-        cmd_name = "get clientid '{clientid}' in realm '{realm}'".format(
+        cmd_name = 'get clientid "{clientid}" in realm "{realm}"'.format(
             clientid=clientid, realm=realm_name)
         url = URL_CLIENTS.format(
             server=self.server, realm=urlquote(realm_name))
@@ -392,17 +392,17 @@ class KeycloakREST(object):
             raise RESTError(cmd_name, response)
 
         if not isinstance(response_json, list):
-            raise TypeError("expected list of client representations"
-                            " but got: {data}".format(data=response_json))
+            raise TypeError('expected list of client representations'
+                            ' but got: {data}'.format(data=response_json))
 
         if not response_json:
             raise KeyError('{item} not found'.format(item=clientid))
 
         if len(response_json) > 1:
-            raise ValueError("expected list of client representations"
-                             " containing exactly 1 item with"
-                             " clientId={clientId})"
-                             " but got: {data}".format(data=response_json,
+            raise ValueError('expected list of client representations'
+                             ' containing exactly 1 item with'
+                             ' clientId={clientId})'
+                             ' but got: {data}'.format(data=response_json,
                                                        clientId=clientid))
 
         self._log_return_value(response_json[0])
@@ -414,7 +414,7 @@ class KeycloakREST(object):
         return client.get('id')
 
     def get_client_descriptor(self, realm_name, metadata):
-        cmd_name = "get client descriptor realm '{realm}'".format(
+        cmd_name = 'get client descriptor realm "{realm}"'.format(
             realm=realm_name)
         url = URL_CLIENT_DESCRIPTION_CONVERTER.format(
             server=self.server, realm=urlquote(realm_name))
@@ -438,7 +438,7 @@ class KeycloakREST(object):
         return response_json
 
     def get_client_secret_by_id(self, realm_name, obj_id):
-        cmd_name = ("get client secret for client '{id}' in realm '{realm}'".
+        cmd_name = ('get client secret for client "{id}" in realm "{realm}"'.
                     format(id=obj_id, realm=realm_name))
         url = URL_CLIENT_SECRET.format(
             server=self.server,
@@ -462,7 +462,7 @@ class KeycloakREST(object):
         return response_json
 
     def regenerate_client_secret_by_id(self, realm_name, obj_id):
-        cmd_name = ("regenerate client secret for client '{id}' in realm '{realm}'".
+        cmd_name = ('regenerate client secret for client "{id}" in realm "{realm}"'.
                     format(id=obj_id, realm=realm_name))
         url = URL_CLIENT_SECRET.format(
             server=self.server,
@@ -486,8 +486,8 @@ class KeycloakREST(object):
         return response_json
 
     def create_client_from_descriptor(self, realm_name, descriptor):
-        cmd_name = "create client from descriptor "
-        "'{client_id}'in realm '{realm}'".format(
+        cmd_name = 'create client from descriptor '
+        '"{client_id}"in realm "{realm}"'.format(
             client_id=descriptor['clientId'], realm=realm_name)
         url = URL_CLIENTS.format(
             server=self.server, realm=urlquote(realm_name))
@@ -507,14 +507,14 @@ class KeycloakREST(object):
         self._log_return_value(response_json)
 
     def create_client(self, realm_name, metadata):
-        logger.debug("create client in realm %s on server %s",
+        logger.debug('create client in realm %s on server %s',
                      realm_name, self.server)
         descriptor = self.get_client_descriptor(realm_name, metadata)
         self.create_client_from_descriptor(realm_name, descriptor)
         return descriptor
 
     def register_client(self, initial_access_token, realm_name, metadata):
-        cmd_name = "register_client realm '{realm}'".format(
+        cmd_name = 'register_client realm "{realm}"'.format(
             realm=realm_name)
         url = URL_CLIENT_REGISTRATION_SAML2.format(
             server=self.server, realm=urlquote(realm_name))
@@ -547,7 +547,7 @@ class KeycloakREST(object):
 
 
     def delete_client_by_id(self, realm_name, obj_id):
-        cmd_name = "delete client id '{id}'in realm '{realm}'".format(
+        cmd_name = 'delete client id "{id}"in realm "{realm}"'.format(
             id=obj_id, realm=realm_name)
         url = URL_CLIENTS_ID.format(
             server=self.server,
@@ -571,7 +571,7 @@ class KeycloakREST(object):
 
     def update_client(self, realm_name, client):
         obj_id = client['id']
-        cmd_name = "update client {clientid} in realm '{realm}'".format(
+        cmd_name = 'update client {clientid} in realm "{realm}"'.format(
             clientid=client['clientId'], realm=realm_name)
         url = URL_CLIENTS_ID.format(
             server=self.server, realm=urlquote(realm_name),
@@ -594,12 +594,12 @@ class KeycloakREST(object):
 
     def update_client_attributes(self, realm_name, client, update_attrs):
         client_id = client['clientId']
-        logger.debug("update client attrs: client_id=%s "
-                     "current attrs=%s update=%s",
+        logger.debug('update client attrs: client_id=%s '
+                     'current attrs=%s update=%s',
                      client_id, client['attributes'], update_attrs)
         client['attributes'].update(update_attrs)
-        logger.debug("update client attrs: client_id=%s "
-                     "new attrs=%s", client_id, client['attributes'])
+        logger.debug('update client attrs: client_id=%s '
+                     'new attrs=%s', client_id, client['attributes'])
         self.update_client(realm_name, client)
 
 
@@ -630,8 +630,8 @@ class KeycloakREST(object):
 
     def create_client_protocol_mapper(self, realm_name, client, mapper):
         obj_id = client['id']
-        cmd_name = ("create protocol-mapper '{mapper_name}' for clientid {clientid} "
-                    "in realm '{realm}'".format(
+        cmd_name = ('create protocol-mapper "{mapper_name}" for clientid {clientid} '
+                    'in realm "{realm}"'.format(
                         mapper_name=mapper['name'],
                         clientid=client['clientId'],
                         realm=realm_name))
@@ -841,7 +841,7 @@ realm metadata
 class TlsVerifyAction(argparse.Action):
     def __init__(self, option_strings, dest, nargs=None, **kwargs):
         if nargs is not None:
-            raise ValueError("nargs not allowed")
+            raise ValueError('nargs not allowed')
         super(TlsVerifyAction, self).__init__(option_strings, dest, **kwargs)
 
     def __call__(self, parser, namespace, values, option_string=None):
