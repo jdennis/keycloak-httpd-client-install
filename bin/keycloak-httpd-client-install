@@ -59,7 +59,9 @@ STATUS_ALREADY_EXISTS_ERROR = 5
 
 SAML_PAOS_BINDING = 'urn:oasis:names:tc:SAML:2.0:bindings:PAOS'
 
-DEFAULT_STAGES = ['mellon', 'keycloak']
+DEFAULT_STAGES = set(['client', 'keycloak'])
+
+
 
 # --------------------------- Exception Definitions ---------------------------
 
@@ -389,6 +391,12 @@ def install_file_from_data(data, dst_file):
     with open(dst_file, 'w') as f:
         f.write(data)
 
+
+def load_data_from_file(filename):
+    logger.debug('load data from file "%s"', filename)
+    with open(filename, 'r') as f:
+        data = f.read()
+    return data
 
 def mkdir(pathname, mode=0o775):
     logger.debug('mkdir pathname="%s" mode=%#o', pathname, mode)
@@ -908,7 +916,7 @@ class UniqueNamesAction(argparse.Action):
     choices because the test for membership in the choices list occurs before
     names are split and we can't use nargs because you end up with a set of lists.
     '''
-    name_choices = []
+    name_choices = set()
     def __init__(self, option_strings, dest, nargs=None, **kwargs):
         if nargs is not None:
             raise ValueError('nargs not allowed')
@@ -921,7 +929,7 @@ class UniqueNamesAction(argparse.Action):
             value = value.strip()
             if not value:
                 continue
-            if self.name_choices is not None:
+            if self.name_choices:
                 if value not in self.name_choices:
                     args = {'value': value,
                             'choices': ', '.join(map(repr, self.name_choices))}
@@ -931,7 +939,7 @@ class UniqueNamesAction(argparse.Action):
             getattr(namespace, self.dest).add(value)
 
 class StageUniqueNamesAction(UniqueNamesAction):
-    name_choices = ['mellon', 'keycloak']
+    name_choices = ['client', 'keycloak']
 
 # -----------------------------------------------------------------------------
 
@@ -1009,7 +1017,11 @@ class Client(KeycloakServer, object):
         pass
 
     def derive_options(self):
-        # Options requiring special handling
+        if self.options.stages is None:
+            self.options.stages = DEFAULT_STAGES
+
+        if 'keycloak' in self.options.stages:
+            self.derive_server_options()
 
         self.options.keycloak_admin_password = None
         if self.options.keycloak_auth_role in ['root-admin', 'realm-admin']:
@@ -1051,6 +1063,9 @@ class Client(KeycloakServer, object):
                                           'variable KEYCLOAK_ADMIN_PASSWORD' %
                                           ('keycloak-admin-password')))
 
+    def derive_server_options(self):
+        pass
+
     def validate_options(self):
         # Verify process permission
 
@@ -1058,6 +1073,11 @@ class Client(KeycloakServer, object):
             raise InsufficientPrivilegeError(
                 'You must be root to run this program')
 
+        if 'keycloak' in self.options.stages:
+            self.validate_server_options()
+
+
+    def validate_server_options(self):
         if self.options.keycloak_auth_role == 'anonymous':
             if self.options.client_originate_method == 'registration':
                 logger.warning(
@@ -1113,6 +1133,14 @@ class Client(KeycloakServer, object):
     def post_client_config_actions(self):
         pass
 
+    def configure_server(self):
+        raise NotImplementedError()
+
+    def post_configure_server_actions(self):
+        pass
+
+    def final_actions(self):
+        raise NotImplementedError()
 
 class MellonClient(Client):
     def __init__(self, options):
@@ -1220,6 +1248,7 @@ class MellonClient(Client):
         install_file_from_data(mellon_sp_metadata,
                                self.options.mellon_sp_metadata_filename)
 
+    def configure_server(self):
         # Configure Keycloak Server
         admin_conn = None
         anonymous_conn = None
@@ -1266,6 +1295,7 @@ class MellonClient(Client):
                             client_id=self.options.mellon_entity_id,
                             realm=self.options.keycloak_realm)))
 
+        mellon_sp_metadata = load_data_from_file(self.options.mellon_sp_metadata_filename)
         if self.options.client_originate_method == 'descriptor':
             logger.step('Creating new client from descriptor')
             logger.info('Create new client "%s"',
@@ -1338,13 +1368,20 @@ class MellonClient(Client):
                 self.options.mellon_entity_id,
                 urls)
 
+
+    def post_client_config_actions(self):
+        anonymous_conn = self.get_anonymous_conn()
+
+        if self.options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+            admin_conn = self.get_admin_conn()
+
         logger.step('Retrieve IdP metadata from Keycloak server')
         idp_metadata = anonymous_conn.get_realm_saml_metadata(
             self.options.keycloak_realm)
         install_file_from_data(idp_metadata,
                                self.options.mellon_dst_idp_metadata_file)
 
-    def post_client_config_actions(self):
+    def final_actions(self):
         logger.info('mellon entityID="%s"', self.options.mellon_entity_id)
         print('mellon entityID="%s"' % self.options.mellon_entity_id)
 
@@ -1360,9 +1397,15 @@ def main():
 
     # ---- Common Arguments ----
 
+    parser.add_argument('-c', '--client', choices=['mellon', 'openidc'],
+                        default='mellon',
+                        help=('Which type of client to configure. '
+                              '"mellon" for mod_auth_mellon, '
+                              '"openidc" for mod_auth_openidc.'))
+
     parser.add_argument('--stages',
                         action=StageUniqueNamesAction,
-                        help=('Execute one or more stages from choices [mellon, keycloak]. '
+                        help=('Execute one or more stages from choices [client, keycloak]. '
                               'May be specified multiple times to accumulated multiple '
                               'names or a single argument may contain multiple space or '
                               'comma separated names'))
@@ -1526,15 +1569,25 @@ def main():
     # ===== Create Client Object =====
 
     try:
-        client = MellonClient(options)
+        if options.client == 'mellon':
+            client = MellonClient(options)
+        else:
+            raise ValueError('Unknown client choice "%s"' % options.client)
 
         client.pre_config_actions()
         client.normalize_options()
         client.derive_options()
         client.validate_options()
         client.post_config_actions()
-        client.configure_client()
-        client.post_client_config_actions()
+        if 'client' in options.stages:
+            client.configure_client()
+        if 'keycloak' in options.stages:
+            client.configure_server()
+            client.post_configure_server_actions()
+        if 'client' in options.stages:
+            client.post_client_config_actions()
+        if 'client' in options.stages:
+            client.final_actions()
 
     except (OperationError, RESTError) as e:
         if options.show_traceback:
