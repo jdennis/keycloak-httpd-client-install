@@ -30,6 +30,19 @@ from keycloak_httpd_client import keycloak_cli
 from keycloak_httpd_client.keycloak_cli import RESTError
 
 
+'''
+FIXME - Client Changes
+
+* httpd_saml_dir -> httpd_federation_dir, move to Client class
+* mellon-protected-locations -> httpd_protected_locations
+* mellon_root -> location_root
+* mellon_httpd_config_filename -> httpd_client_config_filename
+* mellon_hostname -> client_hostname
+* mellon_https_port -> client_https_port
+* mellon_http_url -> client_https_url
+* mellon_entity_id -> clientid
+'''
+
 # ----------------------------- Global Variables ------------------------------
 
 logger = None
@@ -42,13 +55,14 @@ BIN_TIMEOUT = '/usr/bin/timeout'
 DEV_NULL = '/dev/null'
 BIN_TIMEOUT = '/usr/bin/timeout'
 
-HTTPD_SAML_DIR = 'saml2'
+HTTPD_FEDERATION_DIR = 'federation'
 HTTPD_CONF_DIR = 'conf.d'
 
 MELLON_METADATA_TEMPLATE = 'sp_metadata.tpl'
 MELLON_METADATA = 'sp_metadata.xml'
 
 MELLON_HTTPD_CONFIG_TEMPLATE = 'mellon_httpd.conf'
+OIDC_HTTPD_CONFIG_TEMPLATE = 'oidc_httpd.conf'
 
 STATUS_SUCCESS = 0
 STATUS_OPERATION_ERROR = 1
@@ -218,6 +232,25 @@ def join_path(*args):
         path = path + '/'
 
     return path
+
+def generate_random_string(self, n_bits=48):
+    '''
+    Return a random string to be used as a secret.
+
+    This implementation creates a string of hexadecimal digits.
+    There is no guarantee of uniqueness.
+
+    parameters:
+      n_bits
+        number of bits of random data, will be rounded to next
+        highest multiple of 4
+    :returns:
+        string of random hexadecimal digits
+    '''
+    # round up to multiple of 4
+    n_bits = (n_bits + 3) & ~3
+    random_string = '%0*x' % (n_bits >> 2, random.getrandbits(n_bits))
+    return random_string
 
 # -------------------------- Shell Command Utilities --------------------------
 
@@ -835,7 +868,7 @@ def install_mellon_cert(options):
         install_file(options.mellon_key_file, options.mellon_dst_key_file)
         install_file(options.mellon_cert_file, options.mellon_dst_cert_file)
     else:
-        subject = options.mellon_hostname
+        subject = options.client_hostname
         key, cert = generate_cert(subject)
         install_file_from_data(key, options.mellon_dst_key_file)
         install_file_from_data(cert, options.mellon_dst_cert_file)
@@ -855,6 +888,12 @@ def build_mellon_httpd_config_file(options, template_env):
     return template.render(template_params)
 
 
+def build_oidc_httpd_config_file(options, template_env):
+    template_params = build_template_params(options)
+    template = template_env.get_template(OIDC_HTTPD_CONFIG_TEMPLATE)
+    return template.render(template_params)
+
+
 def build_mellon_sp_metadata_file(options, template_env):
     template_params = build_template_params(options)
     template = template_env.get_template(MELLON_METADATA_TEMPLATE)
@@ -862,13 +901,12 @@ def build_mellon_sp_metadata_file(options, template_env):
 
 # ------------ Argparse Argument Conversion/Validation Functions --------------
 
-
 def arg_type_mellon_endpoint(value):
     value = value.strip(' /')
     return value
 
 
-def arg_type_mellon_protected_location(value):
+def arg_type_protected_location(value):
     if not value.startswith('/'):
         raise argparse.ArgumentTypeError('Location must be absolute '
                                          '(arg="%s")' % value)
@@ -896,6 +934,36 @@ class DeprecatedPasswordAction(argparse.Action):
             setattr(namespace, self.dest, values)
         else:
             raise argparse.ArgumentError(self, msg2)
+
+class DeprecatedStoreAction(argparse.Action):
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        super(DeprecatedStoreAction, self).__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        parser._print_message('option "%s" DEPRECATED: %s\n' % (option_string, self.help))
+        setattr(namespace, self.dest, values)
+
+def _argparse_copy_items(items):
+    if items is None:
+        return []
+    # The copy module is used only in the 'append' and 'append_const'
+    # actions, and it is needed only when the default value isn't a list.
+    # Delay its import for speeding up the common case.
+    if type(items) is list:
+        return items[:]
+    import copy
+    return copy.copy(items)
+
+class DeprecatedAppendAction(argparse.Action):
+    def __init__(self, option_strings, dest, nargs=None, **kwargs):
+        super(DeprecatedAppendAction, self).__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        parser._print_message('option "%s" DEPRECATED: %s\n' % (option_string, self.help))
+        items = getattr(namespace, self.dest, None)
+        items = _argparse_copy_items(items)
+        items.append(values)
+        setattr(namespace, self.dest, items)
 
 class UniqueNamesAction(argparse.Action):
     '''Store into dest a set of names.
@@ -1014,7 +1082,7 @@ class Client(KeycloakServer, object):
         pass
 
     def normalize_options(self):
-        pass
+        self.options.location_root = '/' + self.options.location_root.strip(' /')
 
     def derive_options(self):
         if self.options.stages is None:
@@ -1022,6 +1090,12 @@ class Client(KeycloakServer, object):
 
         if 'keycloak' in self.options.stages:
             self.derive_server_options()
+
+        self.options.client_https_url = \
+            normalize_url(
+                'https://{client_hostname}:{client_https_port}'.format(
+                    client_hostname=self.options.client_hostname,
+                    client_https_port=self.options.client_https_port))
 
         self.options.keycloak_admin_password = None
         if self.options.keycloak_auth_role in ['root-admin', 'realm-admin']:
@@ -1076,6 +1150,14 @@ class Client(KeycloakServer, object):
         if 'keycloak' in self.options.stages:
             self.validate_server_options()
 
+        root = join_path(self.options.location_root, '/')
+        for location in self.options.protected_locations:
+            location = join_path(location, '/')
+            if not location.startswith(root):
+                raise ConfigurationError('Invalid protected location "%s" '
+                                         'must be equal to or ancestor of the '
+                                         'location root "%s"' % (location, root))
+
 
     def validate_server_options(self):
         if self.options.keycloak_auth_role == 'anonymous':
@@ -1108,6 +1190,16 @@ class Client(KeycloakServer, object):
             raise OperationError((
                 'Unable to create directory "%s": %s' %
                 (self.options.httpd_conf_dir, six.text_type(e))))
+
+        logger.step('Assure HTTP federation directory is present')
+        try:
+            mkdir(self.options.httpd_federation_dir)
+        except Exception as e:
+            if self.options.show_traceback:
+                traceback.print_exc()
+            raise OperationError((
+                'Unable to create directory "%s": %s' %
+                (self.options.httpd_federation_dir, six.text_type(e))))
 
         # Create jinja2 Template Environment
 
@@ -1152,49 +1244,43 @@ class MellonClient(Client):
     def normalize_options(self):
         super(MellonClient, self).normalize_options()
 
-        self.options.mellon_root = '/' + self.options.mellon_root.strip(' /')
         self.options.mellon_endpoint = self.options.mellon_endpoint.strip(' /')
 
     def derive_options(self):
         super(MellonClient, self).derive_options()
 
-        self.options.httpd_saml_dir = os.path.join(
-            self.options.httpd_dir, HTTPD_SAML_DIR)
+        self.options.httpd_federation_dir = os.path.join(
+            self.options.httpd_dir, HTTPD_FEDERATION_DIR)
         self.options.httpd_conf_dir = os.path.join(
             self.options.httpd_dir, HTTPD_CONF_DIR)
-        self.options.mellon_httpd_config_filename = \
+        self.options.httpd_client_config_filename = \
             os.path.join(self.options.httpd_conf_dir,
                          '{app_name}_mellon_keycloak_{realm}.conf'.format(
                              app_name=self.options.app_name,
                              realm=self.options.keycloak_realm))
         self.options.mellon_sp_metadata_filename = \
-            os.path.join(self.options.httpd_saml_dir,
+            os.path.join(self.options.httpd_federation_dir,
                          '{app_name}_{mellon_metadata}').format(
                              app_name=self.options.app_name,
                              mellon_metadata=MELLON_METADATA)
         self.options.mellon_dst_key_file = \
-            os.path.join(self.options.httpd_saml_dir,
+            os.path.join(self.options.httpd_federation_dir,
                          '{app_name}.key'.format(
                              app_name=self.options.app_name))
         self.options.mellon_dst_cert_file = \
-            os.path.join(self.options.httpd_saml_dir, '{app_name}.cert'.format(
+            os.path.join(self.options.httpd_federation_dir, '{app_name}.cert'.format(
                 app_name=self.options.app_name))
         self.options.mellon_dst_idp_metadata_file = \
-            os.path.join(self.options.httpd_saml_dir,
+            os.path.join(self.options.httpd_federation_dir,
                          '{app_name}_keycloak_{realm}_idp_metadata.xml'.format(
                              app_name=self.options.app_name,
                              realm=self.options.keycloak_realm))
-        self.options.mellon_http_url = \
-            normalize_url(
-                'https://{mellon_hostname}:{mellon_https_port}'.format(
-                    mellon_hostname=self.options.mellon_hostname,
-                    mellon_https_port=self.options.mellon_https_port))
         self.options.mellon_endpoint_path = \
-            join_path(self.options.mellon_root, self.options.mellon_endpoint)
+            join_path(self.options.location_root, self.options.mellon_endpoint)
 
-        if not self.options.mellon_entity_id:
-            url = urlsplit(self.options.mellon_http_url)
-            self.options.mellon_entity_id = urlunsplit((
+        if not self.options.clientid:
+            url = urlsplit(self.options.client_https_url)
+            self.options.clientid = urlunsplit((
                 url.scheme,
                 url.netloc,
                 join_path(self.options.mellon_endpoint_path, 'metadata'),
@@ -1204,28 +1290,8 @@ class MellonClient(Client):
     def validate_options(self):
         super(MellonClient, self).validate_options()
 
-        root = join_path(self.options.mellon_root, '/')
-        for location in self.options.mellon_protected_locations:
-            location = join_path(location, '/')
-            if not location.startswith(root):
-                raise ConfigurationError('Invalid protected location "%s" '
-                                         'must be equal to or ancestor of the '
-                                         'mellon root "%s"' % (location, root))
-
     def post_config_actions(self):
         super(MellonClient, self).post_config_actions()
-
-        # Assure required directories are present
-
-        logger.step('Assure SAML config directory is present')
-        try:
-            mkdir(self.options.httpd_saml_dir)
-        except Exception as e:
-            if self.options.show_traceback:
-                traceback.print_exc()
-            raise OperationError((
-                'Unable to create directory "%s": %s' %
-                (self.options.httpd_saml_dir, six.text_type(e))))
 
     def configure_client(self):
         # Configure Mellon
@@ -1240,7 +1306,7 @@ class MellonClient(Client):
         mellon_httpd_config = build_mellon_httpd_config_file(
             self.options, self.template_env)
         install_file_from_data(mellon_httpd_config,
-                               self.options.mellon_httpd_config_filename)
+                               self.options.httpd_client_config_filename)
 
         logger.step('Build Mellon SP metadata file')
         mellon_sp_metadata = build_mellon_sp_metadata_file(
@@ -1273,33 +1339,33 @@ class MellonClient(Client):
         if self.options.keycloak_auth_role in ['root-admin', 'realm-admin']:
             logger.step('Query realm clients from Keycloak server')
             clients = admin_conn.get_clients(self.options.keycloak_realm)
-            client_ids = \
+            clientids = \
                 keycloak_cli.get_client_client_ids_from_clients(clients)
             logger.info('existing clients in realm %s = [%s]',
-                        self.options.keycloak_realm, ', '.join(client_ids))
+                        self.options.keycloak_realm, ', '.join(clientids))
 
-            if self.options.mellon_entity_id in client_ids:
+            if self.options.clientid in clientids:
                 if self.options.force:
                     logger.step('Force delete client on Keycloak server')
                     logger.info('Delete client "%s"',
-                                self.options.mellon_entity_id)
+                                self.options.clientid)
                     admin_conn.delete_client_by_clientid(
                         self.options.keycloak_realm,
-                        self.options.mellon_entity_id)
+                        self.options.clientid)
 
                 else:
                     raise AlreadyExistsError((
-                        'client "{client_id}" already exists in '
+                        'client "{clientid}" already exists in '
                         'realm "{realm}". '
                         'Use --force to replace it.'.format(
-                            client_id=self.options.mellon_entity_id,
+                            clientid=self.options.clientid,
                             realm=self.options.keycloak_realm)))
 
         mellon_sp_metadata = load_data_from_file(self.options.mellon_sp_metadata_filename)
         if self.options.client_originate_method == 'descriptor':
             logger.step('Creating new client from descriptor')
             logger.info('Create new client "%s"',
-                        self.options.mellon_entity_id)
+                        self.options.clientid)
             admin_conn.create_client(self.options.keycloak_realm,
                                      mellon_sp_metadata)
         elif self.options.client_originate_method == 'registration':
@@ -1321,7 +1387,7 @@ class MellonClient(Client):
 
             logger.step('Creating new client using registration service')
             logger.info('Register new client "%s"',
-                        self.options.mellon_entity_id)
+                        self.options.clientid)
 
             try:
                 anonymous_conn.register_client(initial_access_token,
@@ -1330,9 +1396,9 @@ class MellonClient(Client):
             except RESTError as e:
                 if e.error_description == 'Client Identifier in use':
                     raise AlreadyExistsError((
-                        'client "{client_id}" already exists in '
+                        'client "{clientid}" already exists in '
                         'realm "{realm}"'.format(
-                            client_id=self.options.mellon_entity_id,
+                            clientid=self.options.clientid,
                             realm=self.options.keycloak_realm)))
                 else:
                     raise
@@ -1347,7 +1413,7 @@ class MellonClient(Client):
             update_attrs = {'saml.force.post.binding': True}
             admin_conn.update_client_attributes_by_clientid(
                 self.options.keycloak_realm,
-                self.options.mellon_entity_id,
+                self.options.clientid,
                 update_attrs)
 
             logger.step('Add group attribute mapper to client')
@@ -1356,16 +1422,16 @@ class MellonClient(Client):
                 friendly_name='List of groups user is a member of')
             admin_conn.create_client_protocol_mapper_by_clientid(
                 self.options.keycloak_realm,
-                self.options.mellon_entity_id,
+                self.options.clientid,
                 mapper)
 
             logger.step('Add Redirect URIs to client')
             urls = get_sp_assertion_consumer_url(
                 self.options.mellon_sp_metadata_filename,
-                entity_id=self.options.mellon_entity_id)
+                entity_id=self.options.clientid)
             admin_conn.add_client_redirect_uris_by_clientid(
                 self.options.keycloak_realm,
-                self.options.mellon_entity_id,
+                self.options.clientid,
                 urls)
 
 
@@ -1382,10 +1448,55 @@ class MellonClient(Client):
                                self.options.mellon_dst_idp_metadata_file)
 
     def final_actions(self):
-        logger.info('mellon entityID="%s"', self.options.mellon_entity_id)
-        print('mellon entityID="%s"' % self.options.mellon_entity_id)
+        logger.info('mellon entityID="%s"', self.options.clientid)
+        print('mellon entityID="%s"' % self.options.clientid)
 
 # -----------------------------------------------------------------------------
+
+
+class OIDCClient(Client):
+    def __init__(self, options):
+        super(OIDCClient, self).__init__(options)
+
+    def pre_config_actions(self):
+        super(OIDCClient, self).pre_config_actions()
+
+    def normalize_options(self):
+        super(OIDCClient, self).normalize_options()
+
+    def derive_options(self):
+        super(OIDCClient, self).derive_options()
+
+        self.options.httpd_client_config_filename = \
+            os.path.join(self.options.httpd_conf_dir,
+                         '{app_name}_oidc_keycloak_{realm}.conf'.format(
+                             app_name=self.options.app_name,
+                             realm=self.options.keycloak_realm))
+
+        if self.options.crypto_passphrase is None:
+            self.options.crypto_passphrase = generate_random_string()
+
+    def validate_options(self):
+        super(OIDCClient, self).validate_options()
+
+    def post_config_actions(self):
+        super(OIDCClient, self).post_config_actions()
+
+    def configure_client(self):
+        logger.step('Build OIDC httpd config file')
+        oidc_httpd_config = build_oidc_httpd_config_file(
+            self.options, self.template_env)
+        install_file_from_data(oidc_httpd_config,
+                               self.options.httpd_client_config_filename)
+
+        logger.step('Build Mellon SP metadata file')
+        mellon_sp_metadata = build_mellon_sp_metadata_file(
+            self.options, self.template_env)
+        install_file_from_data(mellon_sp_metadata,
+                               self.options.mellon_sp_metadata_filename)
+
+# -----------------------------------------------------------------------------
+
 def main():
     global logger
 
@@ -1491,14 +1602,6 @@ def main():
                              '(or use a hyphen "-" to read the password '
                              'from stdin)'))
 
-    group.add_argument('-p', '--keycloak-admin-password',
-                       action=DeprecatedPasswordAction,
-                       dest='deprecated_keycloak_admin_password',
-                       help=('Deprecated. Use  --keycloak-admin-password-file '
-                             'instead. During transition perion this argument '
-                             'will continue to accept a hyphen to indicate '
-                             'the password will be read read from stdin)'))
-
     group.add_argument('--keycloak-admin-realm',
                        default='master',
                        help='realm admin belongs to')
@@ -1512,6 +1615,43 @@ def main():
                        default='descriptor',
                        help='select Keycloak method for creating SAML client')
 
+    group.add_argument('-p', '--keycloak-admin-password',
+                       action=DeprecatedPasswordAction,
+                       dest='deprecated_keycloak_admin_password',
+                       help=('Deprecated. Use  --keycloak-admin-password-file '
+                             'instead. During transition perion this argument '
+                             'will continue to accept a hyphen to indicate '
+                             'the password will be read read from stdin)'))
+
+    # ---- Argument Group "Common Client"  ----
+
+    group = parser.add_argument_group('Common Client')
+
+    group.add_argument('--clientid',
+                       help='keycloak ClientID. '
+                       'For SAML it is the SP\'s EntityID and '
+                       'defaults to {client_https_url}/{mellon_endpoint_path}/metadata. '
+                       'For OIDC it is the clientid and '
+                       'defaults to FIXME')
+
+    group.add_argument('--location-root', default='/',
+                       help='common root ancestor for all protected locations')
+
+    group.add_argument('-l', '--protected-locations', action='append',
+                       type=arg_type_protected_location, default=[],
+                       help='Web location to protect with client. '
+                            'May be specified multiple times')
+
+    group.add_argument('--client-hostname', default=socket.getfqdn(),
+                       help='Fully qualified public host name of Apache server')
+
+    group.add_argument('--client-https-port', default=443, type=int,
+                       help='SSL/TLS port on client-hostname')
+
+    group.add_argument('--crypto-passphrase',
+                       help='Used to encrypt cookies, cache data, etc. '
+                       'If not supplied a random string will be generated.')
+
     # ---- Argument Group "Mellon SP"  ----
 
     group = parser.add_argument_group('Mellon SP')
@@ -1522,23 +1662,10 @@ def main():
     group.add_argument('--mellon-cert-file',
                        help='certficate file')
 
-    group.add_argument('--mellon-hostname', default=socket.getfqdn(),
-                       help='Machine\'s fully qualified host name')
-
-    group.add_argument('--mellon-https-port', default=443, type=int,
-                       help='SSL/TLS port on mellon-hostname')
-
-    group.add_argument('--mellon-root', default='/',
-                       help='common root ancestor for all mellon endpoints')
-
     group.add_argument('--mellon-endpoint', default='mellon',
                        type=arg_type_mellon_endpoint,
                        help='Used to form the MellonEndpointPath, e.g. '
-                       '{mellon_root}/{mellon_endpoint}.')
-
-    group.add_argument('--mellon-entity-id',
-                       help='SP SAML Entity ID, '
-                       'defaults to {mellon_http_url}/{mellon_endpoint_path}/metadata')
+                       '{location_root}/{mellon_endpoint}.')
 
     group.add_argument('--mellon-idp-attr-name', default='IDP',
                        help='name of the attribute Mellon adds which will '
@@ -1553,10 +1680,26 @@ def main():
     group.add_argument('--mellon-organization-url',
                        help='Add SAML OrganizationURL to SP metadata')
 
-    group.add_argument('-l', '--mellon-protected-locations', action='append',
-                       type=arg_type_mellon_protected_location, default=[],
-                       help='Web location to protect with Mellon. '
-                            'May be specified multiple times')
+    group.add_argument('--mellon-protected-locations', action=DeprecatedAppendAction,
+                       type=arg_type_protected_location, dest='protected_locations',
+                       help='Use --protected-locations instead')
+
+
+    group.add_argument('--mellon-hostname', action=DeprecatedStoreAction,
+                       help='use --client-hostname')
+
+    group.add_argument('--mellon-https-port', action=DeprecatedStoreAction,
+                       help='User --client-https-port')
+
+    group.add_argument('--mellon-root', action=DeprecatedStoreAction,
+                       help='Use --location-root')
+
+    group.add_argument('--mellon-entity-id', action=DeprecatedStoreAction,
+                       help='use --clientid')
+
+    # ---- Argument Group "OIDC RP"  ----
+
+    group = parser.add_argument_group('OIDC RP')
 
     # ===== Process command line arguments =====
 
