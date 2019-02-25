@@ -1,5 +1,18 @@
 #!/usr/bin/python
 
+'''
+FIXME - Client Changes
+
+* httpd_saml_dir -> httpd_federation_dir, move to Client class
+* mellon-protected-locations -> httpd_protected_locations
+* mellon_root -> location_root
+* mellon_httpd_config_filename -> httpd_client_config_filename
+* mellon_hostname -> client_hostname
+* mellon_https_port -> client_https_port
+* mellon_http_url -> client_https_url
+* mellon_entity_id -> clientid
+'''
+
 from __future__ import print_function
 
 import argparse
@@ -12,6 +25,7 @@ import logging.handlers
 from collections import namedtuple
 import os
 import pwd
+import random
 import re
 import shutil
 import socket
@@ -28,20 +42,6 @@ from six.moves.urllib.parse import urlsplit, urlunsplit
 from lxml import etree
 from keycloak_httpd_client import keycloak_cli
 from keycloak_httpd_client.keycloak_cli import RESTError
-
-
-'''
-FIXME - Client Changes
-
-* httpd_saml_dir -> httpd_federation_dir, move to Client class
-* mellon-protected-locations -> httpd_protected_locations
-* mellon_root -> location_root
-* mellon_httpd_config_filename -> httpd_client_config_filename
-* mellon_hostname -> client_hostname
-* mellon_https_port -> client_https_port
-* mellon_http_url -> client_https_url
-* mellon_entity_id -> clientid
-'''
 
 # ----------------------------- Global Variables ------------------------------
 
@@ -63,6 +63,8 @@ MELLON_METADATA = 'sp_metadata.xml'
 
 MELLON_HTTPD_CONFIG_TEMPLATE = 'mellon_httpd.conf'
 OIDC_HTTPD_CONFIG_TEMPLATE = 'oidc_httpd.conf'
+OIDC_CLIENT_REGISTRATION_TEMPLATE = 'oidc-client-registration.tpl'
+OIDC_CLIENT_REPRESENTATION_TEMPLATE = 'oidc-client-representation.tpl'
 
 STATUS_SUCCESS = 0
 STATUS_OPERATION_ERROR = 1
@@ -233,7 +235,7 @@ def join_path(*args):
 
     return path
 
-def generate_random_string(self, n_bits=48):
+def generate_random_string(n_bits=48):
     '''
     Return a random string to be used as a secret.
 
@@ -251,6 +253,53 @@ def generate_random_string(self, n_bits=48):
     n_bits = (n_bits + 3) & ~3
     random_string = '%0*x' % (n_bits >> 2, random.getrandbits(n_bits))
     return random_string
+
+try:
+    from os.path import commonpath
+except ImportError:
+    # os.path.commonpath first appeared in Python 3.5
+    # If our version of Python does not have it use this simplified but almost
+    # identical version that is compatible with 2.7 <= Python <= 3.5
+    def commonpath(paths):
+        """Given a sequence of path names, returns the longest common sub-path."""
+
+        if not paths:
+            raise ValueError('commonpath() arg is an empty sequence')
+
+        if isinstance(paths[0], bytes):
+            sep = b'/'
+            curdir = b'.'
+        else:
+            sep = '/'
+            curdir = '.'
+
+        split_paths = [path.split(sep) for path in paths]
+
+        try:
+            isabs, = set(p[:1] == sep for p in paths)
+        except ValueError:
+            raise ValueError("Can't mix absolute and relative paths")
+
+        split_paths = [[c for c in s if c and c != curdir] for s in split_paths]
+        s1 = min(split_paths)
+        s2 = max(split_paths)
+        common = s1
+        for i, c in enumerate(s1):
+            if c != s2[i]:
+                common = s1[:i]
+                break
+
+        prefix = sep if isabs else sep[:0]
+        return prefix + sep.join(common)
+
+def is_path_antecedent(ancestor, antecedent):
+    'True if antecedent path is below the ancestor path'
+    ancestor = os.path.normpath(ancestor)
+    antecedent = os.path.normpath(antecedent)
+    if ancestor == antecedent:
+        return False
+    common = commonpath((ancestor, antecedent))
+    return ancestor == common
 
 # -------------------------- Shell Command Utilities --------------------------
 
@@ -881,22 +930,30 @@ def build_template_params(options):
               if not x.startswith('_')}
     return params
 
-
-def build_mellon_httpd_config_file(options, template_env):
+def build_mellon_httpd_config(options, template_env):
     template_params = build_template_params(options)
     template = template_env.get_template(MELLON_HTTPD_CONFIG_TEMPLATE)
     return template.render(template_params)
 
 
-def build_oidc_httpd_config_file(options, template_env):
+def build_mellon_sp_metadata(options, template_env):
+    template_params = build_template_params(options)
+    template = template_env.get_template(MELLON_METADATA_TEMPLATE)
+    return template.render(template_params)
+
+def build_oidc_httpd_config(options, template_env):
     template_params = build_template_params(options)
     template = template_env.get_template(OIDC_HTTPD_CONFIG_TEMPLATE)
     return template.render(template_params)
 
-
-def build_mellon_sp_metadata_file(options, template_env):
+def build_oidc_client_registration(options, template_env):
     template_params = build_template_params(options)
-    template = template_env.get_template(MELLON_METADATA_TEMPLATE)
+    template = template_env.get_template(OIDC_CLIENT_REGISTRATION_TEMPLATE)
+    return template.render(template_params)
+
+def build_oidc_client_representation(options, template_env):
+    template_params = build_template_params(options)
+    template = template_env.get_template(OIDC_CLIENT_REPRESENTATION_TEMPLATE)
     return template.render(template_params)
 
 # ------------ Argparse Argument Conversion/Validation Functions --------------
@@ -949,9 +1006,8 @@ def _argparse_copy_items(items):
     # The copy module is used only in the 'append' and 'append_const'
     # actions, and it is needed only when the default value isn't a list.
     # Delay its import for speeding up the common case.
-    if type(items) is list:
+    if isinstance(items, list):
         return items[:]
-    import copy
     return copy.copy(items)
 
 class DeprecatedAppendAction(argparse.Action):
@@ -1088,8 +1144,23 @@ class Client(KeycloakServer, object):
         if self.options.stages is None:
             self.options.stages = DEFAULT_STAGES
 
+        print("jrd derive options stages=%s" % self.options.stages)
+        self.options.httpd_federation_dir = os.path.join(
+            self.options.httpd_dir, HTTPD_FEDERATION_DIR)
+
+        self.options.httpd_conf_dir = os.path.join(
+            self.options.httpd_dir, HTTPD_CONF_DIR)
+
         if 'keycloak' in self.options.stages:
             self.derive_server_options()
+
+        if self.options.client_data_format is None:
+            if self.options.client == 'mellon':
+                self.options.client_data_format = 'saml2'
+            elif self.options.client == 'openidc':
+                self.options.client_data_format = 'default'
+            else:
+                raise ValueError('Unknown client: "%s"' % self.options.client)
 
         self.options.client_https_url = \
             normalize_url(
@@ -1147,6 +1218,7 @@ class Client(KeycloakServer, object):
             raise InsufficientPrivilegeError(
                 'You must be root to run this program')
 
+        print("jrd validate options stages=%s" % self.options.stages)
         if 'keycloak' in self.options.stages:
             self.validate_server_options()
 
@@ -1160,23 +1232,55 @@ class Client(KeycloakServer, object):
 
 
     def validate_server_options(self):
-        if self.options.keycloak_auth_role == 'anonymous':
-            if self.options.client_originate_method == 'registration':
-                logger.warning(
-                    'Using client originate method "registration" with the '
-                    '"anonymous" authentication role disables updating the '
-                    'client configuration after registration. You may need to '
-                    'adjust the client configuration manually in the Keycloak '
-                    'admin console. Use one of the admin authentication roles '
-                    'to permit automated client configuration.')
+        if self.options.client_originate_method == 'descriptor':
+            if self.options.client_data_format != 'default':
+                raise ConfigurationError('The "%s" client originate method '
+                                         'requires the client data format '
+                                         'to be "default", not "%s"' % (
+                                             self.options.client_originate_method,
+                                             self.options.client_data_format))
 
-            if self.options.client_originate_method == 'descriptor':
-                raise ConfigurationError('The "descriptor" client originate '
-                                         'method requires an admin auth role')
+            if self.options.keycloak_auth_role == 'anonymous':
+                raise ConfigurationError('The "%s" client originate method '
+                                         'does not permit the keycloak auth role '
+                                         'to be "%s"' % (
+                                             self.options.client_originate_method,
+                                             self.options.keycloak_auth_role))
 
-            if not self.options.initial_access_token:
-                raise ConfigurationError('You must supply an initial access '
-                                         'token with anonymous authentication')
+        elif self.options.client_originate_method == 'registration':
+
+            if self.options.keycloak_auth_role == 'anonymous':
+                if not self.options.initial_access_token:
+                    raise ConfigurationError('You must supply an initial access '
+                                             'token with anonymous authentication')
+
+            if self.options.client == 'openidc':
+                if self.options.client_data_format not in ['default', 'oidc']:
+                    raise ConfigurationError('The "%s" client originate method '
+                                             'for "%s" clients requires the '
+                                             'client data format to be '
+                                             'one of %s, not "%s"' % (
+                                                 self.options.client_originate_method,
+                                                 self.options.client,
+                                                 ['default', 'oidc'],
+                                                 self.options.client_data_format))
+
+            elif self.options.client == 'mellon':
+
+                if self.options.client_data_format != 'saml2':
+                    raise ConfigurationError('The "%s" client originate method '
+                                             'for "%s" clients requires the '
+                                             'client data format to be '
+                                             'one of %s, not "%s"' % (
+                                                 self.options.client_originate_method,
+                                                 self.options.client,
+                                                 'saml2',
+                                                 self.options.client_data_format))
+            else:
+                raise ValueError('Unknown client: "%s"' % self.options.client)
+        else:
+            raise ValueError('Unknown client originate method "%s"' %
+                             self.options.client_originate_method)
 
     def post_config_actions(self):
         # Assure required directories are present
@@ -1225,101 +1329,10 @@ class Client(KeycloakServer, object):
     def post_client_config_actions(self):
         pass
 
-    def configure_server(self):
-        raise NotImplementedError()
-
-    def post_configure_server_actions(self):
-        pass
-
-    def final_actions(self):
-        raise NotImplementedError()
-
-class MellonClient(Client):
-    def __init__(self, options):
-        super(MellonClient, self).__init__(options)
-
-    def pre_config_actions(self):
-        super(MellonClient, self).pre_config_actions()
-
-    def normalize_options(self):
-        super(MellonClient, self).normalize_options()
-
-        self.options.mellon_endpoint = self.options.mellon_endpoint.strip(' /')
-
-    def derive_options(self):
-        super(MellonClient, self).derive_options()
-
-        self.options.httpd_federation_dir = os.path.join(
-            self.options.httpd_dir, HTTPD_FEDERATION_DIR)
-        self.options.httpd_conf_dir = os.path.join(
-            self.options.httpd_dir, HTTPD_CONF_DIR)
-        self.options.httpd_client_config_filename = \
-            os.path.join(self.options.httpd_conf_dir,
-                         '{app_name}_mellon_keycloak_{realm}.conf'.format(
-                             app_name=self.options.app_name,
-                             realm=self.options.keycloak_realm))
-        self.options.mellon_sp_metadata_filename = \
-            os.path.join(self.options.httpd_federation_dir,
-                         '{app_name}_{mellon_metadata}').format(
-                             app_name=self.options.app_name,
-                             mellon_metadata=MELLON_METADATA)
-        self.options.mellon_dst_key_file = \
-            os.path.join(self.options.httpd_federation_dir,
-                         '{app_name}.key'.format(
-                             app_name=self.options.app_name))
-        self.options.mellon_dst_cert_file = \
-            os.path.join(self.options.httpd_federation_dir, '{app_name}.cert'.format(
-                app_name=self.options.app_name))
-        self.options.mellon_dst_idp_metadata_file = \
-            os.path.join(self.options.httpd_federation_dir,
-                         '{app_name}_keycloak_{realm}_idp_metadata.xml'.format(
-                             app_name=self.options.app_name,
-                             realm=self.options.keycloak_realm))
-        self.options.mellon_endpoint_path = \
-            join_path(self.options.location_root, self.options.mellon_endpoint)
-
-        if not self.options.clientid:
-            url = urlsplit(self.options.client_https_url)
-            self.options.clientid = urlunsplit((
-                url.scheme,
-                url.netloc,
-                join_path(self.options.mellon_endpoint_path, 'metadata'),
-                '',
-                ''))
-
-    def validate_options(self):
-        super(MellonClient, self).validate_options()
-
-    def post_config_actions(self):
-        super(MellonClient, self).post_config_actions()
-
-    def configure_client(self):
-        # Configure Mellon
-        logger.step('Set up Service Provider X509 Certificiates')
-        install_mellon_cert(self.options)
-
-        cert_base64 = load_cert_from_file(self.options.mellon_dst_cert_file)
-        self.options.sp_signing_cert = cert_base64
-        self.options.sp_encryption_cert = cert_base64
-
-        logger.step('Build Mellon httpd config file')
-        mellon_httpd_config = build_mellon_httpd_config_file(
-            self.options, self.template_env)
-        install_file_from_data(mellon_httpd_config,
-                               self.options.httpd_client_config_filename)
-
-        logger.step('Build Mellon SP metadata file')
-        mellon_sp_metadata = build_mellon_sp_metadata_file(
-            self.options, self.template_env)
-        install_file_from_data(mellon_sp_metadata,
-                               self.options.mellon_sp_metadata_filename)
-
-    def configure_server(self):
-        # Configure Keycloak Server
+    def create_client_on_server(self, client_data_format, client_data):
         admin_conn = None
         anonymous_conn = None
 
-        anonymous_conn = self.get_anonymous_conn()
         if self.options.keycloak_auth_role in ['root-admin', 'realm-admin']:
             admin_conn = self.get_admin_conn()
 
@@ -1361,13 +1374,18 @@ class MellonClient(Client):
                             clientid=self.options.clientid,
                             realm=self.options.keycloak_realm)))
 
-        mellon_sp_metadata = load_data_from_file(self.options.mellon_sp_metadata_filename)
         if self.options.client_originate_method == 'descriptor':
             logger.step('Creating new client from descriptor')
-            logger.info('Create new client "%s"',
-                        self.options.clientid)
-            admin_conn.create_client(self.options.keycloak_realm,
-                                     mellon_sp_metadata)
+            logger.info('Create new client "%s"', self.options.clientid)
+
+            if client_data_format != 'default':
+                raise ValueError('Invalid client_data_format "%s" for '
+                                 'client_originate_method "%s"' %
+                                 (client_data_format,
+                                  self.options.client_originate_method))
+            client_representation = client_data
+            admin_conn.create_client_from_client_representation(self.options.keycloak_realm,
+                                                                client_representation)
         elif self.options.client_originate_method == 'registration':
 
             if self.options.initial_access_token:
@@ -1385,14 +1403,17 @@ class MellonClient(Client):
                     raise ValueError('You must root or realm admin privileges '
                                      'to acquire an initial access token')
 
-            logger.step('Creating new client using registration service')
-            logger.info('Register new client "%s"',
-                        self.options.clientid)
+            logger.step('Registering new client')
+            logger.info('Registering new client "%s" using "%s" '
+                        'client data format',
+                        self.options.clientid,
+                        client_data_format)
 
             try:
+                anonymous_conn = self.get_anonymous_conn()
                 anonymous_conn.register_client(initial_access_token,
                                                self.options.keycloak_realm,
-                                               mellon_sp_metadata)
+                                               client_data_format, client_data)
             except RESTError as e:
                 if e.error_description == 'Client Identifier in use':
                     raise AlreadyExistsError((
@@ -1402,11 +1423,120 @@ class MellonClient(Client):
                             realm=self.options.keycloak_realm)))
                 else:
                     raise
-        else:
-            raise ValueError('Unknown client-originate-method = "%s"' %
-                             self.options.client_originate_method)
+
+    def configure_server(self):
+        raise NotImplementedError()
+
+    def post_configure_server_actions(self):
+        pass
+
+    def final_actions(self):
+        pass
+
+class MellonClient(Client):
+    def __init__(self, options):
+        super(MellonClient, self).__init__(options)
+
+    def pre_config_actions(self):
+        super(MellonClient, self).pre_config_actions()
+
+    def normalize_options(self):
+        super(MellonClient, self).normalize_options()
+
+        self.options.mellon_endpoint = self.options.mellon_endpoint.strip(' /')
+
+    def derive_options(self):
+        super(MellonClient, self).derive_options()
+
+        self.options.httpd_client_config_filename = \
+            os.path.join(self.options.httpd_conf_dir,
+                         '{app_name}_mellon_keycloak_{realm}.conf'.format(
+                             app_name=self.options.app_name,
+                             realm=self.options.keycloak_realm))
+        self.options.mellon_sp_metadata_filename = \
+            os.path.join(self.options.httpd_federation_dir,
+                         '{app_name}_{mellon_metadata}').format(
+                             app_name=self.options.app_name,
+                             mellon_metadata=MELLON_METADATA)
+        self.options.mellon_dst_key_file = \
+            os.path.join(self.options.httpd_federation_dir,
+                         '{app_name}.key'.format(
+                             app_name=self.options.app_name))
+        self.options.mellon_dst_cert_file = \
+            os.path.join(self.options.httpd_federation_dir, '{app_name}.cert'.format(
+                app_name=self.options.app_name))
+        self.options.mellon_dst_idp_metadata_file = \
+            os.path.join(self.options.httpd_federation_dir,
+                         '{app_name}_keycloak_{realm}_idp_metadata.xml'.format(
+                             app_name=self.options.app_name,
+                             realm=self.options.keycloak_realm))
+        self.options.mellon_endpoint_path = \
+            join_path(self.options.location_root, self.options.mellon_endpoint)
+
+        if not self.options.clientid:
+            url = urlsplit(self.options.client_https_url)
+            self.options.clientid = urlunsplit((
+                url.scheme,
+                url.netloc,
+                join_path(self.options.mellon_endpoint_path, 'metadata'),
+                '',
+                ''))
+
+    def validate_options(self):
+        super(MellonClient, self).validate_options()
+
+    def validate_server_options(self):
+        super(MellonClient, self).validate_server_options()
+
+        if self.options.keycloak_auth_role == 'anonymous':
+            if self.options.client_originate_method == 'registration':
+                logger.warning(
+                    'Using client originate method "registration" with the '
+                    '"anonymous" authentication role disables updating the '
+                    'client configuration after registration. You may need to '
+                    'adjust the client configuration manually in the Keycloak '
+                    'admin console. Use one of the admin authentication roles '
+                    'to permit automated client configuration.')
+
+    def post_config_actions(self):
+        super(MellonClient, self).post_config_actions()
+
+    def configure_client(self):
+        # Configure Mellon
+        logger.step('Set up Service Provider X509 Certificiates')
+        install_mellon_cert(self.options)
+
+        cert_base64 = load_cert_from_file(self.options.mellon_dst_cert_file)
+        self.options.sp_signing_cert = cert_base64
+        self.options.sp_encryption_cert = cert_base64
+
+        logger.step('Build Mellon httpd config file')
+        mellon_httpd_config = build_mellon_httpd_config(
+            self.options, self.template_env)
+        install_file_from_data(mellon_httpd_config,
+                               self.options.httpd_client_config_filename)
+
+        logger.step('Build Mellon SP metadata file')
+        mellon_sp_metadata = build_mellon_sp_metadata(
+            self.options, self.template_env)
+        install_file_from_data(mellon_sp_metadata,
+                               self.options.mellon_sp_metadata_filename)
+
+    def configure_server(self):
+        admin_conn = None
+
+        sp_metadata = \
+            load_data_from_file(self.options.mellon_sp_metadata_filename)
+
+        client_representation = \
+            admin_conn.convert_saml_metadata_to_client_representation(
+                self.options.realm_name, sp_metadata)
+
+        self.create_client_on_server(self.options.client_data_format,
+                                     client_representation)
 
         if self.options.keycloak_auth_role in ['root-admin', 'realm-admin']:
+            admin_conn = self.get_admin_conn()
             # Enable Force Post Binding, registration service fails to
             # to enable it (however creation with client descriptor does)
             logger.step('Enable saml.force.post.binding')
@@ -1437,9 +1567,6 @@ class MellonClient(Client):
 
     def post_client_config_actions(self):
         anonymous_conn = self.get_anonymous_conn()
-
-        if self.options.keycloak_auth_role in ['root-admin', 'realm-admin']:
-            admin_conn = self.get_admin_conn()
 
         logger.step('Retrieve IdP metadata from Keycloak server')
         idp_metadata = anonymous_conn.get_realm_saml_metadata(
@@ -1476,24 +1603,65 @@ class OIDCClient(Client):
         if self.options.crypto_passphrase is None:
             self.options.crypto_passphrase = generate_random_string()
 
+        if self.options.oidc_client_secret is None:
+            self.options.oidc_client_secret = generate_random_string()
+
+        if self.options.oidc_redirect_uri is None:
+            self.options.oidc_redirect_uri = join_path(
+                self.options.protected_locations[0], 'redirect_uri')
+
+        if not self.options.clientid:
+            self.options.clientid = self.options.client_https_url
+
     def validate_options(self):
         super(OIDCClient, self).validate_options()
+
+        valid = False
+        for protected_location in self.options.protected_locations:
+            if is_path_antecedent(protected_location, self.options.oidc_redirect_uri):
+                valid = True
+                break
+        if not valid:
+            raise ConfigurationError('The redirect_uri "%s" is not below '
+                                     'any of the protected locations %s' %
+                                     (self.options.oidc_redirect_uri,
+                                      self.options.protected_locations))
 
     def post_config_actions(self):
         super(OIDCClient, self).post_config_actions()
 
     def configure_client(self):
         logger.step('Build OIDC httpd config file')
-        oidc_httpd_config = build_oidc_httpd_config_file(
+        oidc_httpd_config = build_oidc_httpd_config(
             self.options, self.template_env)
         install_file_from_data(oidc_httpd_config,
                                self.options.httpd_client_config_filename)
 
-        logger.step('Build Mellon SP metadata file')
-        mellon_sp_metadata = build_mellon_sp_metadata_file(
-            self.options, self.template_env)
-        install_file_from_data(mellon_sp_metadata,
-                               self.options.mellon_sp_metadata_filename)
+    def configure_server(self):
+        if self.options.client_originate_method == 'descriptor':
+            logger.step('Build Keycloak OIDC clientRepresentation')
+            client_data = build_oidc_client_representation(
+                self.options,
+                self.template_env)
+        elif self.options.client_originate_method == 'registration':
+            logger.step('Build Keycloak OIDC Client Registration')
+            logger.info('Build Keycloak OIDC Client Registration '
+                        'using client data format "%s"',
+                        self.options.client_data_format)
+            if self.options.client_data_format == 'default':
+                client_data = build_oidc_client_representation(
+                    self.options,
+                    self.template_env)
+            elif self.options.client_data_format == 'oidc':
+                client_data = build_oidc_client_registration(
+                    self.options,
+                    self.template_env)
+            else:
+                raise ValueError('Unknown client data format "%s"' %
+                                 self.options.client_data_format)
+
+        self.create_client_on_server(self.options.client_data_format,
+                                     client_data)
 
 # -----------------------------------------------------------------------------
 
@@ -1609,11 +1777,20 @@ def main():
     group.add_argument('--initial-access-token',
                        help='realm initial access token for '
                        'client registeration')
-
     group.add_argument('--client-originate-method',
                        choices=['descriptor', 'registration'],
                        default='descriptor',
-                       help='select Keycloak method for creating SAML client')
+                       help='select Keycloak method for creating client')
+
+    group.add_argument('--client-data-format',
+                       choices=['default', 'oidc', 'saml2'],
+                       help='When using the registration originate method '
+                       'this selects the type of data used to create the client. '
+                       'For OIDC it can be either "default" to use Keycloak\'s '
+                       'clientRespresentation JSON object or "oidc" for the '
+                       'OpenID Connect Dynamic Client Registration JSON '
+                       'object. For OIDC it defaults to "default"'
+                       'For SAML it must be "saml2.')
 
     group.add_argument('-p', '--keycloak-admin-password',
                        action=DeprecatedPasswordAction,
@@ -1632,12 +1809,13 @@ def main():
                        'For SAML it is the SP\'s EntityID and '
                        'defaults to {client_https_url}/{mellon_endpoint_path}/metadata. '
                        'For OIDC it is the clientid and '
-                       'defaults to FIXME')
+                       'defaults to {client_https_url}')
 
     group.add_argument('--location-root', default='/',
                        help='common root ancestor for all protected locations')
 
     group.add_argument('-l', '--protected-locations', action='append',
+                       required=True,
                        type=arg_type_protected_location, default=[],
                        help='Web location to protect with client. '
                             'May be specified multiple times')
@@ -1701,6 +1879,19 @@ def main():
 
     group = parser.add_argument_group('OIDC RP')
 
+    group.add_argument('--oidc-redirect-uri',
+                       help='Must be an antecedent (i.e. child) of one of the '
+                       'protected locations. Defaults to first protected '
+                       'location appended with "/redirect_uri"')
+
+    group.add_argument('--oidc-client-secret',
+                       help='OIDC client secret. If not supplied a random '
+                       'string will be generated')
+
+    group.add_argument('--oidc-remote-user-claim', default='sub',
+                       help='claim used when setting the REMOTE_USER variable, '
+                       'default="sub"')
+
     # ===== Process command line arguments =====
 
     options = parser.parse_args()
@@ -1714,6 +1905,8 @@ def main():
     try:
         if options.client == 'mellon':
             client = MellonClient(options)
+        elif options.client == 'openidc':
+            client = OIDCClient(options)
         else:
             raise ValueError('Unknown client choice "%s"' % options.client)
 

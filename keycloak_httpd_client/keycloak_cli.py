@@ -47,7 +47,7 @@ URL_CLIENT_DESCRIPTION_CONVERTER = (
 
 URL_INITIAL_ACCESS_TOKEN = (
     '{server}/auth/admin/realms/{realm}/clients-initial-access')
-URL_CLIENT_REGISTRATION_CLIENT_REPRESENTATION = (
+URL_CLIENT_REGISTRATION_DEFAULT = (
     '{server}/auth/realms/{realm}/clients-registrations/default')
 URL_CLIENT_REGISTRATION_SAML2 = (
     '{server}/auth/realms/{realm}/clients-registrations/saml2-entity-descriptor')
@@ -57,6 +57,9 @@ URL_CLIENT_REGISTRATION_OIDC = (
 URL_CLIENT_PROTOCOL_MAPPER_MODEL = (
     '{server}/auth/admin/realms/{realm}/clients/{id}/protocol-mappers/models')
 
+
+CONTENT_TYPE_JSON = 'application/json;charset=utf-8'
+CONTENT_TYPE_XML = 'application/xml;charset=utf-8'
 
 ADMIN_CLIENT_ID = 'admin-cli'
 
@@ -69,7 +72,10 @@ class RESTError(Exception):
         self.cmd_name = cmd_name
         self.status_code = response.status_code
         self.status_reason = response.reason
-        self.response_json = response.json()
+        try:
+            self.response_json = response.json()
+        except ValueError:
+            self.response_json = None
         self.response_text = response.text
         self.error_description = None
         self.error = None
@@ -413,13 +419,13 @@ class KeycloakREST(object):
         client = self.get_client_by_clientid(realm_name, clientid)
         return client.get('id')
 
-    def get_client_descriptor(self, realm_name, metadata):
+    def convert_saml_metadata_to_client_representation(self, realm_name, metadata):
         cmd_name = 'get client descriptor realm "{realm}"'.format(
             realm=realm_name)
         url = URL_CLIENT_DESCRIPTION_CONVERTER.format(
             server=self.server, realm=urlquote(realm_name))
 
-        headers = {'Content-Type': 'application/xml;charset=utf-8'}
+        headers = {'Content-Type': CONTENT_TYPE_XML}
 
         self._log_rest_request(cmd_name, url, metadata)
         response = self.session.post(url, headers=headers, data=metadata)
@@ -485,15 +491,17 @@ class KeycloakREST(object):
         self._log_return_value(response_json)
         return response_json
 
-    def create_client_from_descriptor(self, realm_name, descriptor):
-        cmd_name = 'create client from descriptor '
-        '"{client_id}"in realm "{realm}"'.format(
-            client_id=descriptor['clientId'], realm=realm_name)
+    def create_client_from_client_representation(self, realm_name, client_representation):
+        cmd_name = ('create client from client representation in '
+                    'realm "{realm}"'.format(realm=realm_name))
         url = URL_CLIENTS.format(
             server=self.server, realm=urlquote(realm_name))
 
-        self._log_rest_request(cmd_name, url, descriptor)
-        response = self.session.post(url, json=descriptor)
+        headers = {'Content-Type': CONTENT_TYPE_JSON}
+
+        self._log_rest_request(cmd_name, url, client_representation)
+        response = self.session.post(url, headers=headers,
+                                     data=client_representation)
         self._log_rest_response(cmd_name, response)
 
         try:
@@ -506,27 +514,46 @@ class KeycloakREST(object):
 
         self._log_return_value(response_json)
 
-    def create_client(self, realm_name, metadata):
+    def create_client_from_saml_metadata(self, realm_name, saml_metadata):
         logger.debug('create client in realm %s on server %s',
                      realm_name, self.server)
-        descriptor = self.get_client_descriptor(realm_name, metadata)
-        self.create_client_from_descriptor(realm_name, descriptor)
-        return descriptor
+        client_representation = \
+            self.convert_saml_metadata_to_client_representation(realm_name,
+                                                                saml_metadata)
+        self.create_client_from_client_representation(realm_name,
+                                                      client_representation)
+        return client_representation
 
-    def register_client(self, initial_access_token, realm_name, metadata):
-        cmd_name = 'register_client realm "{realm}"'.format(
-            realm=realm_name)
-        url = URL_CLIENT_REGISTRATION_SAML2.format(
+    def register_client(self, initial_access_token, realm_name,
+                        client_data_format, client_data):
+        cmd_name = 'register_client realm "{realm}" using client data format "{client_data_format}"'.format(
+            realm=realm_name, client_data_format=client_data_format)
+
+        if client_data_format == 'default':
+            template = URL_CLIENT_REGISTRATION_DEFAULT
+            content_type = CONTENT_TYPE_JSON
+        elif client_data_format == 'oidc':
+            template = URL_CLIENT_REGISTRATION_OIDC
+            content_type = CONTENT_TYPE_JSON
+        elif client_data_format == 'saml2':
+            template = URL_CLIENT_REGISTRATION_SAML2
+            content_type = CONTENT_TYPE_XML
+        else:
+            raise ValueError('Unknown client data format: "%s"' %
+                             client_data_format)
+
+        url = template.format(
             server=self.server, realm=urlquote(realm_name))
 
-        headers = {'Content-Type': 'application/xml;charset=utf-8'}
+        headers = {'Content-Type': content_type}
 
         if initial_access_token:
             headers['Authorization'] = 'Bearer {token}'.format(
                 token=initial_access_token)
 
-        self._log_rest_request(cmd_name, url, metadata)
-        response = self.session.post(url, headers=headers, data=metadata)
+        self._log_rest_request(cmd_name, url, client_data)
+        response = self.session.post(url, headers=headers,
+                                     data=client_data)
         self._log_rest_response(cmd_name, response)
 
         try:
@@ -782,16 +809,26 @@ def do_regenerate_client_secret(options, conn):
     print(py_json_pretty(secret))
 
 def do_create_client(options, conn):
-    metadata = options.metadata.read()
-    descriptor = conn.create_client(options.realm_name, metadata)
+    client_data = options.client_data.read()
+    if options.client_data_format == 'saml':
+        client_representation = \
+            conn.convert_saml_metadata_to_client_representation(options.realm_name,
+                                                                client_data)
+    elif options.client_data_format == 'default':
+        client_representation = client_data
+    else:
+        raise ValueError('Unknown client_data_format "%s"' %
+                         options.client_data_format)
+    descriptor = \
+        conn.create_client_from_client_representation(options.realm_name,
+                                                      client_representation)
 
 
 def do_register_client(options, conn):
-    metadata = options.metadata.read()
+    client_data = options.client_data.read()
     client_representation = conn.register_client(
-        options.initial_access_token,
-        options.realm_name, metadata)
-
+        options.initial_access_token, options.realm_name,
+        options.client_data_format, client_data)
 
 def do_delete_client(options, conn):
     conn.delete_client_by_clientid(options.realm_name, options.clientid)
@@ -993,17 +1030,29 @@ def main():
     # --- client create
     cmd_parser = client_sub_parser.add_parser('create',
                                               help='create new client')
-    cmd_parser.add_argument('-m', '--metadata', type=argparse.FileType('rb'),
+    cmd_parser.add_argument('--client-data',
+                            type=argparse.FileType('rb'),
                             required=True,
-                            help='SP metadata file or stdin')
+                            help='client description (i.e. JSON, XML) '
+                            'file or stdin')
+    cmd_parser.add_argument('--client-data-format',
+                            choices=['default', 'saml'],
+                            default='default',
+                            help='Client data type')
     cmd_parser.set_defaults(func=do_create_client)
 
     # --- client register
     cmd_parser = client_sub_parser.add_parser('register',
                                               help='register new client')
-    cmd_parser.add_argument('-m', '--metadata', type=argparse.FileType('rb'),
+    cmd_parser.add_argument('--client-data',
+                            type=argparse.FileType('rb'),
                             required=True,
-                            help='SP metadata file or stdin')
+                            help='client description (i.e. JSON, XML) '
+                            'file or stdin')
+    cmd_parser.add_argument('--client-data-format',
+                            choices=['default', 'saml', 'oidc'],
+                            default='default',
+                            help='Client data type')
     cmd_parser.add_argument('--initial-access-token', required=True,
                             help='realm initial access token for '
                             'client registeration')
