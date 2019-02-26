@@ -1,7 +1,0 @@
-#!/usr/bin/python
-
-import sys
-
-from keycloak_httpd_client.keycloak_cli import main
-
-sys.exit(main())
