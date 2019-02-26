@@ -470,8 +470,9 @@ class Client(KeycloakServer, object):
                             self.options.keycloak_realm)
                     initial_access_token = client_initial_access['token']
                 else:
-                    raise ValueError('You must root or realm admin privileges '
-                                     'to acquire an initial access token')
+                    raise ConfigurationError('You must root or have realm '
+                                             'admin privileges to acquire an '
+                                             'initial access token')
 
             logger.step('Registering new client')
             logger.info('Registering new client "%s" using "%s" '
@@ -992,7 +993,8 @@ def main():
         elif options.client == 'openidc':
             client = OIDCClient(options)
         else:
-            raise ValueError('Unknown client choice "%s"' % options.client)
+            raise ConfigurationError('Unknown client choice "%s"' %
+                                     options.client)
 
         client.pre_config_actions()
         client.normalize_options()
