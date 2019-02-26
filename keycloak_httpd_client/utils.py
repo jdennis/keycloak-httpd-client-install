@@ -27,9 +27,109 @@ BIN_TIMEOUT = '/usr/bin/timeout'
 
 SAML_PAOS_BINDING = 'urn:oasis:names:tc:SAML:2.0:bindings:PAOS'
 
+LOG_FILE_ROTATION_COUNT = 3
+STEP = logging.INFO + 1
+
 # -------------------------------- Variables ----------------------------------
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------- Logging Utilities ------------------------------
+
+def _add_step_logger():
+    class StepLogger(logging.Logger):
+
+        def __init__(self, name):
+            self.step_number = 1
+            super(StepLogger, self).__init__(name)
+
+        def step(self, msg, *args, **kwargs):
+            if self.isEnabledFor(STEP):
+                self._log(STEP, ('[Step %2d] ' % self.step_number) + msg,
+                          args, **kwargs)
+                self.step_number += 1
+
+    print("jrd adding step logger")
+    logging.addLevelName(STEP, 'STEP')
+    logging.setLoggerClass(StepLogger)
+
+def configure_logging(options, add_step_logger=False):
+    if add_step_logger:
+        _add_step_logger()
+
+    log_dir = os.path.dirname(options.log_file)
+    if not log_dir:
+        log_dir = '.'
+    if os.path.exists(log_dir):
+        if not os.path.isdir(log_dir):
+            raise ValueError('logging directory "{log_dir}" exists but is not '
+                             'directory'.format(log_dir=log_dir))
+    else:
+        os.makedirs(log_dir)
+
+    # Check if log exists and should therefore be rolled
+    need_roll = os.path.isfile(options.log_file)
+
+    if add_step_logger:
+        log_level = STEP
+    else:
+        log_level = logging.ERROR
+
+    if options.verbose:
+        log_level = logging.INFO
+    if options.debug:
+        log_level = logging.DEBUG
+
+        # These two lines enable debugging at httplib level
+        # (requests->urllib3->http.client) You will see the REQUEST,
+        # including HEADERS and DATA, and RESPONSE with HEADERS but
+        # without DATA.  The only thing missing will be the
+        # response.body which is not logged.
+        try:
+            import http.client as http_client  # Python 3
+        except ImportError:
+            import httplib as http_client      # Python 2
+
+        http_client.HTTPConnection.debuglevel = 1
+
+        # Turn on cookielib debugging
+        if False:
+            try:
+                import http.cookiejar as cookiejar
+            except ImportError:
+                import cookielib as cookiejar  # Python 2
+            cookiejar.debug = True
+
+    root_logger = logging.getLogger()
+
+    try:
+        file_handler = logging.handlers.RotatingFileHandler(
+            options.log_file, mode='w', backupCount=LOG_FILE_ROTATION_COUNT)
+    except IOError as e:
+        print('Unable to open log file %s (%s)' % (options.log_file, e),
+              file=sys.stderr)
+
+    else:
+        formatter = logging.Formatter(
+            '%(asctime)s %(name)s %(levelname)s: %(message)s')
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(logging.DEBUG)
+        root_logger.addHandler(file_handler)
+
+        if need_roll:
+            file_handler.doRollover()
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    formatter = logging.Formatter('%(message)s')
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(log_level)
+    root_logger.addHandler(console_handler)
+
+    # Set the log level on the logger to the lowest level
+    # possible. This allows the message to be emitted from the logger
+    # to it's handlers where the level will be filtered on a per
+    # handler basis.
+    root_logger.setLevel(1)
 
 # ------------------------------ JSON Utilities -------------------------------
 

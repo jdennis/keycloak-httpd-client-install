@@ -16,80 +16,8 @@ import keycloak_httpd_client.utils as utils
 
 # ------------------------------------------------------------------------------
 
-logger = None
 prog_name = os.path.basename(sys.argv[0])
-
-LOG_FILE_ROTATION_COUNT = 3
-
-# ------------------------------------------------------------------------------
-
-
-def configure_logging(options):
-    global logger  # pylint: disable=W0603
-
-    log_dir = os.path.dirname(options.log_file)
-    if not log_dir:
-        log_dir = '.'
-    if os.path.exists(log_dir):
-        if not os.path.isdir(log_dir):
-            raise ValueError('logging directory "{log_dir}" exists but is not '
-                             'directory'.format(log_dir=log_dir))
-    else:
-        os.makedirs(log_dir)
-
-    log_level = logging.ERROR
-    if options.verbose:
-        log_level = logging.INFO
-    if options.debug:
-        log_level = logging.DEBUG
-
-        # These two lines enable debugging at httplib level
-        # (requests->urllib3->http.client) You will see the REQUEST,
-        # including HEADERS and DATA, and RESPONSE with HEADERS but
-        # without DATA.  The only thing missing will be the
-        # response.body which is not logged.
-        try:
-            import http.client as http_client  # Python 3
-        except ImportError:
-            import httplib as http_client      # Python 2
-
-        http_client.HTTPConnection.debuglevel = 1
-
-        # Turn on cookielib debugging
-        if False:
-            try:
-                import http.cookiejar as cookiejar
-            except ImportError:
-                import cookielib as cookiejar  # Python 2
-            cookiejar.debug = True
-
-    logger = logging.getLogger(prog_name)
-
-    try:
-        file_handler = logging.handlers.RotatingFileHandler(
-            options.log_file, backupCount=LOG_FILE_ROTATION_COUNT)
-    except IOError as e:
-        print('Unable to open log file %s (%s)' % (options.log_file, e),
-              file=sys.stderr)
-
-    else:
-        formatter = logging.Formatter(
-            '%(asctime)s %(name)s %(levelname)s: %(message)s')
-        file_handler.setFormatter(formatter)
-        file_handler.setLevel(logging.DEBUG)
-        logger.addHandler(file_handler)
-
-    console_handler = logging.StreamHandler(sys.stdout)
-    formatter = logging.Formatter('%(message)s')
-    console_handler.setFormatter(formatter)
-    console_handler.setLevel(log_level)
-    logger.addHandler(console_handler)
-
-    # Set the log level on the logger to the lowest level
-    # possible. This allows the message to be emitted from the logger
-    # to it's handlers where the level will be filtered on a per
-    # handler basis.
-    logger.setLevel(1)
+logger = None
 
 # ------------------------------------------------------------------------------
 
@@ -383,7 +311,8 @@ def main():
 
     # Process command line arguments
     options = parser.parse_args()
-    configure_logging(options)
+    utils.configure_logging(options)
+    logger = logging.getLogger(prog_name)
 
     if options.permit_insecure_transport:
         os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
