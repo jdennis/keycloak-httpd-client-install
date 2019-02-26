@@ -15,7 +15,10 @@ setup(name=name,
       scripts = ['bin/keycloak-httpd-client-install'],
       data_files = [('/usr/share/{name}/templates'.format(name=name),
                      ['templates/mellon_httpd.conf',
-                      'templates/sp_metadata.tpl'])],
+                      'templates/sp_metadata.tpl'
+                      'templates/oidc-client-registration.tpl',
+                      'templates/oidc-client-representation.tpl',
+                      'templates/oidc_httpd.conf'])],
       requires = ['requests', 'requests_oauthlib', 'jinja2'],
       classifiers = [           # see https://pypi.python.org/pypi?%3Aaction=list_classifiers
           "Programming Language :: Python",
