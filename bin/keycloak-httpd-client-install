@@ -694,7 +694,9 @@ class OIDCClient(Client):
                 self.options.protected_locations[0], 'redirect_uri')
 
         if not self.options.clientid:
-            self.options.clientid = self.options.client_https_url
+            self.options.clientid = '{client_hostname}-{app_name}'.format(
+                hostname=self.options.client_hostname,
+                app_name=self.options.app_name)
 
     def validate_options(self):
         super(OIDCClient, self).validate_options()
@@ -893,7 +895,7 @@ def main():
                        'For SAML it is the SP\'s EntityID and '
                        'defaults to {client_https_url}/{mellon_endpoint_path}/metadata. '
                        'For OIDC it is the clientid and '
-                       'defaults to {client_https_url}')
+                       'defaults to {client_hostname}-{app_name}')
 
     group.add_argument('--location-root', default='/',
                        help='common root ancestor for all protected locations')
