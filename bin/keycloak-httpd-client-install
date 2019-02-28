@@ -695,7 +695,7 @@ class OIDCClient(Client):
 
         if not self.options.clientid:
             self.options.clientid = '{client_hostname}-{app_name}'.format(
-                hostname=self.options.client_hostname,
+                client_hostname=self.options.client_hostname,
                 app_name=self.options.app_name)
 
     def validate_options(self):
@@ -763,7 +763,7 @@ def main():
     # ---- Common Arguments ----
 
     parser.add_argument('-c', '--client', choices=['mellon', 'openidc'],
-                        default='mellon',
+                        default='openidc',
                         help=('Which type of client to configure. '
                               '"mellon" for mod_auth_mellon, '
                               '"openidc" for mod_auth_openidc.'))
@@ -877,14 +877,6 @@ def main():
                        'OpenID Connect Dynamic Client Registration JSON '
                        'object. For OIDC it defaults to "default"'
                        'For SAML it must be "saml".')
-
-    group.add_argument('-p', '--keycloak-admin-password',
-                       action=utils.DeprecatedPasswordAction,
-                       dest='deprecated_keycloak_admin_password',
-                       help=('Deprecated. Use  --keycloak-admin-password-file '
-                             'instead. During transition perion this argument '
-                             'will continue to accept a hyphen to indicate '
-                             'the password will be read read from stdin)'))
 
     # ---- Argument Group "Common Client"  ----
 

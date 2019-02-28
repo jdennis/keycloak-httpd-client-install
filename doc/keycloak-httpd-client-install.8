@@ -22,24 +22,29 @@ Tools to configure Apache HTTPD as Keycloak client
 [\fB\-a\fR \fIroot\-admin|realm\-admin|anonymous\fR]
 [\fB\-u\fR \fIKEYCLOAK_ADMIN_USERNAME\fR]
 \fB\-P\fR \fIKEYCLOAK_ADMIN_PASSWORD_FILE\fR
-\fB\-p\fR \fIKEYCLOAK_ADMIN_PASSWORD\fR
 [\fB\-\-keycloak\-admin\-realm\fR \fIKEYCLOAK_ADMIN_REALM\fR]
 [\fB\-\-initial\-access\-token\fR \fIINITIAL_ACCESS_TOKEN\fR]
+[\fB\-\-client\-hostname\fR \fICLIENT_HOSTNAME\fR]
+[\fB\-\-client\-https-port\fR \fCLIENT_HTTPS_PORT\fR]
 [\fB\-\-client\-originate\-method\fR \fIdescriptor|registration\fR]
+[\fB\-\-client\-data\-format\fR \fIdefault|oidc|saml2\fR]
+[\fB\-\-location\-root\fR \fILOCATION_ROOT\fR]
+
+[\fB\-\-oidc\-redirect\-uri\fR \fIOIDC_REDIRECT_URI\fR]
+[\fB\-\-oidc\-client\-secret\fR \fIOIDC_CLIENT_SECRET\fR]
+[\fB\-\-oidc\-remote\-user\-claim\fR \fIOIDC_REMOTE_USER_CLAIM\fR]
+
 [\fB\-\-mellon\-key\-file\fR \fIMELLON_KEY_FILE\fR]
 [\fB\-\-mellon\-cert\-file\fR \fIMELLON_CERT_FILE\fR]
-[\fB\-\-mellon\-hostname\fR \fIMELLON_HOSTNAME\fR]
-[\fB\-\-mellon\-https-port\fR \fIMELLON_HTTPS_PORT\fR]
-[\fB\-\-mellon\-root\fR \fIMELLON_ROOT\fR]
 [\fB\-\-mellon\-endpoint\fR \fIMELLON_ENDPOINT\fR]
-[\fB\-\-mellon\-entity\-id\fR \fIMELLON_ENTITY_ID\fR]
+[\fB\-\-clientid\fR \fICLIENTID\fR]
 [\fB\-\-mellon\-idp\-attr\-name\fR \fIMELLON_IDP_ATTR_NAME\fR]
 [\fB\-\-mellon\-organization\-name\fR \fIMELLON_ORGANIZATION_NAME\fR]
 [\fB\-\-mellon\-organization\-display\-name\fR \fIMELLON_ORGANIZATION_DISPLAY_NAME\fR]
 [\fB\-\-mellon\-organization\-url\fR \fIMELLON_ORGANIZATION_URL\fR]
-[\fB\-l\fR \fIMELLON_PROTECTED_LOCATIONS\fR]
+[\fB\-l\fR \fIPROTECTED_LOCATIONS\fR]
 
-Configure mod_auth_mellon as Keycloak client
+Configure mod_auth_mellon or mod_auth_openidc as Keycloak client
 
 .SH OPTIONS
 .TP
@@ -67,7 +72,7 @@ log file pathname
 (default: /var/log/python\-keycloak\-httpd\-client/keycloak\-httpd\-client\-install.log)
 .TP
 .BR \-\-app\-name " " \fIAPP_NAME\fR
-name of the web app being protected by mellon
+name of the web app being protected by mod_auth_mellon
 (default: None)
 .TP
 .BR  \-\-force
@@ -86,7 +91,7 @@ disable. Or the pathname to a OpenSSL CA bundle to use.
 (default: True)
 
 .PP
-Program Configuration:
+.B Program Configuration:
 
 .TP
 .BR \-\-template\-dir " " \fITEMPLATE_DIR\fR
@@ -98,7 +103,7 @@ Template location
 (default: /etc/httpd)
 
 .PP
-Keycloak IdP:
+.B Keycloak IdP:
 
 .TP
 .BR \-r ", " \-\-keycloak\-realm " " \fIKEYCLOAK_REALM\fR
@@ -122,17 +127,6 @@ file containing the admin password (or use a hyphen "-" to indicate the
 password will be read from stdin)
 (default: None)
 .TP
-.BR \-p ", " \-\-keycloak\-admin\-password " " \fIKEYCLOAK_ADMIN_PASSWORD\fR
-admin password (or use a hyphen "-" to to indicate the password will read
-from stdin)
-(default: None)
-\fB Deprecated.\fR It is insecure to pass a password on the command line.
-Use \fI\-\-keycloak\-admin\-password\-file\fR instead. \fBIt is no longer
-possible to use this argument to pass a password.\fR During a transition
-period this argument will continue to accept a hyphen to indicate the
-password should be read from stdin in a manner identical to
-\fI\-\-keycloak\-admin\-password\-file\fR.
-.TP
 .BR \-\-keycloak\-admin\-realm " " \fIKEYCLOAK_ADMIN_REALM\fR
 realm admin belongs to
 (default: master)
@@ -140,13 +134,104 @@ realm admin belongs to
 .BR \-\-initial\-access\-token " " \fIINITIAL_ACCESS_TOKEN\fR
 realm initial access token for client registeration
 (default: None)
-.TP
-.BR \-\-client\-originate\-method " " \fIdescriptor|registration\fR
-select Keycloak method for creating SAML client
-(default: descriptor)
 
 .PP
-Mellon SP:
+.B Common Client Options
+
+.TP
+.BR \-\-client\-hostname " " \fICLIENT_HOSTNAME\fR
+The fully qualified host name the client is running on or responds to.
+.TP
+.BR \-\-client\-https\-port " " \fICLIENT_HTTPS_PORT\fR
+SSL/TLS port used to connect to client
+
+
+.TP
+.BR \-\-client\-originate\-method " " \fIdescriptor|registration\fR
+The method used on the Keycloak REST interface for creating a new client.
+There are two possibilities.
+.RS
+.B descriptor
+.RS
+A Keycloak clientRespresentation JSON object is sent to the Keycloak
+client REST endpoint. This is a native Keycloak data format understood
+only by Keycloak and as such permits setting values unique to
+Keycloak. This is sometimes refered to as the default client data
+format.
+.RE
+.RE
+.RS
+.B registration
+.RS
+The data used to create the client is sent to the Keycloak registraton
+endpoint. The data format depends on the type of client being created
+and can be contolled by the \fI\-\-client\-data\-format\fR. The
+registration method has the advantage of not requiring admin
+privileges, see the \fBAuthentication Levels and Permissions\fR and
+\BDetermining which authentication role to use\fR topics for
+details.
+(default: descriptor)
+.RE
+.RE
+.TP
+.BR \-\-client\-data\-format " " \fBCLIENT_DATA_FORMAT\fR
+Must be one of \fBdefault\fR|\fBoidc\fR|\fBsaml2\fR.
+When using the registration client originate method this selects the
+type of data used to create the client.  For OIDC it can be either
+\fBdefault\fR to use Keycloak's clientRespresentation JSON object or
+\fBoidc\fR for the OpenID Connect Dynamic Client Registration JSON
+object. For OIDC it defaults to \fBdefault\fR For SAML it must be
+\fBsaml2\fR.)
+(default: default)
+.RS
+.B default
+.RS
+A Keycloak clientRepresentation JSON Object sent to the
+\fB/realms/{realm}/clients-registrations/default\fR endpoint.
+.RE
+.RE
+.RS
+.B oidc
+.RS
+A OIDC Dynamic Client Registeration JSON object sent to the
+\fB/realms/{realm}/clients-registrations/openid-connect\fR endpoint
+.RE
+.RE
+.RS
+.B saml2
+.RS
+A SAML metadata entity descriptor in XML format sent to the
+\fB/realms/{realm}/clients-registrations/saml2-entity-descriptor\fR endpoint.
+.RE
+.RE
+
+.TP
+.BR \-\-location\-root " " \fILOCATION_ROOT\fR
+Common root ancestor for all protected locations
+
+.PP
+.B mod_auth_oidc OIDC RP Client Options
+
+.TP
+.BR \-\-oidc\-redirect\--uri " " \fIOIDC_REDIRECT_URI\fR
+The OIDC redirect_uri. Must be an antecedent (i.e. child) of one of the
+protected locations.
+(default: The first protected location appened with "/redirect_uri")
+
+.TP
+.BR \-\-oidc\-client\-secret " " \fIOIDC_CLIENT_SECRET\fR
+OIDC client secret
+(default: generated random string)
+
+.TP
+.BR \-\-oidc\-remote\-user\-claim " " \fIOIDC_REMOTE_USER_CLAIM\fR
+claim used when setting the REMOTE_USER variable
+(default: "sub")
+
+
+
+.PP
+.B mod_auth_mellon SP Client Options
 
 .TP
 .BR \-\-mellon\-key\-file " " \fIMELLON_KEY_FILE\fR
@@ -157,27 +242,32 @@ certficate key file
 certficate file
 (default: None)
 .TP
-.BR \-\-mellon\-hostname " " \fIMELLON_HOSTNAME\fR
-Machine's fully qualified host name
-.TP
-.BR \-\-mellon\-https\-port " " \fIMELLON_HTTPS_PORT\fR
-SSL/TLS port on mellon-hostname
-.TP
-.BR \-\-mellon\-root " " \fIMELLON_ROOT\fR
-Common root ancestor for all mellon endpoints
-.TP
 .BR \-\-mellon\-endpoint " " \fIMELLON_ENDPOINT\fR
-Used to form the MellonEndpointPath, e.g. 
+Used to form the MellonEndpointPath, e.g.
 {mellon_root}/{mellon_endpoint}
 (default: mellon)
 .TP
-.BR \-\-mellon\-entity\-id " " \fIMELLON_ENTITY_ID\fR
-SP SAML Entity ID
-(default: {mellon_http_url}/{mellon_root}/{mellon_endpoint_path}/metadata)
+.BR \-\-clientid " " \fICLIENTID\fR
+The \fBclientid\fR Keycloak identifies the client by. This has different
+meanings depending on the type of client.
+.RS
+.B SAML
+.RS
+It is the \fBEntityID\fR and defaults to
+{client_https_url}/{mellon_root}/{mellon_endpoint_path}/metadata)
+.RE
+.RE
+.RS
+.B OIDC
+.RS
+It is the \fBclientid\fR and defaults to
+{client_hostname}-{app_name}
+.RE
+.RE
 .TP
 .BR \-\-mellon\-idp\-attr\-name " " \fIMELLON_IDP_ATTR_NAME\fR
-Name of the attribute Mellon adds which will contain the IdP entity id
-(default: {mellon_http_url}/{mellon_root}/{mellon_endpoint_path}/metadata)
+Name of the attribute mod_auth_mellon adds which will contain the IdP entity id
+(default: {client_https_url}/{mellon_root}/{mellon_endpoint_path}/metadata)
 .TP
 .BR \-\-mellon\-organization\-name " " \fIMELLON_ORGANIZATION_NAME\fR
 Add SAML OrganizationName to SP metadata
@@ -191,14 +281,76 @@ Add SAML OrganizationDisplayName to SP metadata
 Add SAML OrganizationURL to SP metadata
 (default: None)
 .TP
-.BR \-l ", " \-\-mellon\-protected\-locations " " \fIMELLON_PROTECTED_LOCATIONS\fR
-Web location to protect with Mellon. May be specified multiple times
+.BR \-l ", " \-\-protected\-locations " " \fIPROTECTED_LOCATIONS\fR
+Web location to be protected by client. May be specified multiple times
 (default: [])
+
+.SH DEPRECATED OPTIONS
+
+.TP
+.BR \-p ", " \-\-keycloak\-admin\-password "
+It is insecure to pass a password on the command line. Use one of the other
+methods detailed in the \fBHow to pass the Keycloak admin password\fR topic.
+
+.TP
+.BR  "\-\-mellon\-protected\-locations"
+Use \fB\-l\fR or \fB\-\-protected\-locations\fR instead.
+
+.TP
+.BR  "\-\-mellon-hostname"
+Use \fB\-\-client\-hostname\fR instead.
+
+.TP
+.BR  "\-\-mellon\-https\-port"
+Use \fB\-\-client\-https\-port\fR instead.
+
+.TP
+.BR  "\-\-mellon\-root"
+Use \fB\-\-location\-root\fR instead.
+
+.TP
+.BR  "\-\-mellon\-entity\-id"
+Use \fB\-\-clientid\fR instead.
+
 
 .SH DESCRIPTION
 
-\fBkeycloak\-httpd\-client\-install\fR will configure a node running Apache with mod_auth_mellon as SAML Service Provider (\fBSP\fR) utilizing a \fBKeycloak\fR server as an Identity Provider(\fBIdP\fR).
+\fBkeycloak\-httpd\-client\-install\fR is used to configure a httpd
+(Apache) instance using mod_auth_openidc or mod_auth_mellon
+authentication modules as a client of the Keycloak Identity Provider
+(IdP) in order to provide authentication and authorization services to
+web applications.
 
+.PP
+.B Quick Start
+
+Despite the wealth of options this tool provides it can be run simply
+needing a minimum of just 4 pieces of information:
+
+.PP
+\fB*\fR An application name
+.PP
+\fB*\fR A web resource to protect (e.g. location)
+.PP
+\fB*\fR The Keycloak server and realm
+.PP
+\fB*\fR Keycloak authentication credentials
+
+.PP
+.B Simple Example
+.RS
+sudo keycloak\-httpd\-client\-install \\
+    --app-name foo \\
+    --protected-location /private \\
+    --keycloak-server-url keycloak.example.com \\
+    --keycloak-realm my_organization \\
+    --keycloak-admin-password-file admin_passwd
+.nf
+.fi
+.RE
+.PP
+Note, by default mod_auth_openidc will be configured as the client. To
+configure mod_auth_mellon instead add this option: \fB\-\-client mellon\fR.
 .PP
 .B How to pass the Keycloak admin password
 
@@ -207,7 +359,7 @@ The Keycloak admin password may be passed via one of the possible ways listed
 here in the order the tool looks for the password.
 
 .PP
-\fB1.\fR Try the \fI\-\-keycloak\-admin\-password\-file\fR argument.
+\fB1.\fR Try the \fB\-\-keycloak\-admin\-password\-file\fR argument.
 If it's a hyphen read the password from stdin, otherwise treat the argument
 as the name of a file, open the file and read the password from the file.
 
@@ -215,11 +367,6 @@ as the name of a file, open the file and read the password from the file.
 \fB2.\fR Test for the existence of the \fBKEYCLOAK_ADMIN_PASSWORD\fR
 environment variable. If the \fBKEYCLOAK_ADMIN_PASSWORD\fR is defined
 read the password from it.
-
-.PP
-\fB3.\fR Try the \fBdeprecated\fR \fI\-\-keycloak\-admin\-password\fR argument.
-If it's a hyphen read the password from stdin, otherwise return an error
-because passwords should never be passed on the command line.
 
 .PP
 \fB4.\fR Prompt for the password from the terminal.
@@ -276,21 +423,48 @@ In general the principle of \fIleast privilige\fR should apply. Grant to the too
 .PP
 \fB*\fR Can create the target realm if it does not exist.
 .RE
-
 .PP
 .B Client creation methods
 
-Keycloak offers two methods to add a client to a realm
+Keycloak offers two methods to add a client to a realm Selected with
+\fB\-\-client\-originate\-method\fR option.
 .PP
+\fBregistration\fR
 .RS
-\fB*\fR The OpenID Connect client registration service. Note even though we are registering a SAML Service Provider (SP) which is not part of OAuth2 nor OpenID Connect the client registration service is still capable of registering a SAML SP client. Selected with \fB\-\-client\-originate\-method register\fR.
+Originally designed to support the OIDC
+Dynmaic Client Registration service it can also be used to register
+clients with Keycloak's default clientRepresentation JSON Object or
+SAML SP clients using SAML Entity Descriptor Metadata in XML format
+depending on the exact endpoint utilized. See
+\fB\-\-cient-data-formt\fR for details. The primary benefit of the
+client origination method is not requiring admin privileges, rather an
+initial access token issued by the realm admin is used, this is called
+anonymous authentication. Selected with
+\fB\-\-client\-originate\-method register\fR.
 .PP
-\fB*\fR Utilizing the Keycloak REST API to create and configure the SAML SP client. The Keycloak REST API utilizes a 2\-step process whereby the SP metadata is sent to the the Keycloak instance and it returns a client descriptor which is then used to create the client. Selected with \fB\-\-client\-originate\-method descriptor\fR.
+The client registration service requies the use of an initial access
+token. For all authentiction roles an initial access token can be
+provided on the command line via the \fBinitial\-access\-token\fR
+option. The initial access token will have to have been provided by a
+Keycloak administrator who pre\-creates it. If the authencation role
+is either \fIroot\-admin\fR or \fIrealm\-admin\fR the tool has
+sufficient privilige to obtain an initial access token on it's behalf
+negating the need for a Keycloak admin to supply one externally.
 .RE
+\fBdescriptor\fR
+.RS
+This method sends Keycloak's native
+clientRepresentation JSON object to the
+\fBauth/admin/realms/{realm}/clients\fR client endpoint to create or
+update a client.
 .PP
-At the time of this writing the client registration service behaves differently than the REST API. Advice on which to use is likely to be dependent upone the Keycloak version. Note, if anonymous authentication is used in conjunction with a initial access token then the client registration service \fImust\fR be used.
-.PP
-The client registration service requies the use of an initial access token. For all authentiction roles an initial access token can be provided on the command line via the \fBinitial\-access\-token\fR option. The initial access token will have to have been provided by a Keycloak administrator who pre\-creates it. If the authencation role is either \fIroot\-admin\fR or \fIrealm\-admin\fR the tool has sufficient privilige to obtain an initial access token on it's behalf negating the need for a Keycloak admin to supply one externally.
+If the client is a SAML SP it's Entity Descriptor XML Metadata is
+first sent to the
+\fBauth/admin/realms/{realm}/client-description-converter\fR
+conversion endpoint which returns a native clientRepresention JSON
+object derived from the SAML SP metadata. The derived
+clientRepresentation is subsequently sent to the client REST endpoint.
+.RE
 .PP
 The client registration service may be used by the following authentication roles:
 .RS
@@ -313,20 +487,22 @@ The REST API may be used by the following authentication roles:
 .SH OPERATION
 
 .PP
-\fBkeycloak\-httpd\-client\-install\fR performs the following operational steps:
-
+\fBkeycloak\-httpd\-client\-install\fR performs the following
+operational steps which can be grouped into two major operational groups:
 .PP
-\fB*\fR Connect to Keycloak Server.
-.RS
 .PP
-A session is established with the Keycloak server. OAuth2 is used to log in as the admin user using the \fB\-\-keycloak\-admin\-username\fR and \fB\-\-keycloak\-admin\-password\-file\fR options. The Keycloak server is identified by the \fB\-keycloak\-server\-url\fR option. This step is performed first to assure the remaining steps can complete successfully. A session is maintained for efficiency reasons. You may also need to specify \fB\-\-keycloak\-admin\-role\fR and \fB\-\-keycloak\-admin\-realm\fR to indicate the privilege level you are authenticating with. An anonymous auth role connects to the Keycloak service without any authentication.
-.RE
-
+\fB*\fR Configure the httpd client
+.PP
+\fB*\fR Add the httpd client to the Keycloak server.
+.PP
+.B Configure the httpd client
 .PP
 \fB*\fR Create directories.
 .RS
 .PP
-Files written by \fBkeycloak\-httpd\-client\-install\fR need a destination directory (see \fBFILES\fR). If the necessary directories are not present they are created.
+Files written by \fBkeycloak\-httpd\-client\-install\fR need a
+destination directory (see \fBFILES\fR). If the necessary directories
+are not present they are created.
 .RE
 .PP
 \fB*\fR Set up template environment
@@ -335,28 +511,57 @@ Files written by \fBkeycloak\-httpd\-client\-install\fR need a destination direc
 Many of the files written by \fBkeycloak\-httpd\-client\-install\fR are based on \fIjinga2\fR templates. The default template file location can be overridden with the \fB\-\-template\-dir\fR option.
 .RE
 .PP
-\fB*\fR Set up Service Provider X509 Certificiates.
+\fB*\fR Set up X509 Certificiates.
 .RS
 .PP
-A SAML SP must have a X509 certificate and key used to sign and optionally encrypt it's SAML messages sent to the SAML IdP. \fBkeycloak\-httpd\-client\-install\fR can generate a self\-signed certificate for you or you may supply your own key and certificate via the \fB\-\-mellon\-key\-file\fR and \fB\-\-mellon\-cert\-file\fR options. The files must be in PEM format.
+Some client configurations require the use of X509 certificates and
+keys.  If these were not supplied as an option a self-signed
+certificate will be generated.
 .RE
 .PP
-\fB*\fR Build Mellon httpd config file.
+\fB*\fR Build the mod_auth_openidc or mod_auth_mellon httpd config file.
 .RS
 .PP
-The Mellon HTTPD configuration file tells \fImod_auth_mellon\fR where to find things such as certificates and metadata files as well as what web resources to protect. It is generated from the \fImellon_httpd.conf\fR template file. (see \fBFILES\fR). There is one mellon httpd conf file per application.
+This is the httpd configuration file which will be installed in
+Apache's conf.d configuration directory. It contains configuration
+directives for mod_auth_openidc or mod_auth_mellon depending on which
+client is being configured.
 .RE
 .PP
-\fB*\fR Build Mellon SP metadata file.
+\fB*\fR Build the client's protocol description
 .RS
 .PP
-The Mellon SP needs to be registered with the Keycloak IdP. This forms a trust relationship and provides infomation to the IdP about the Mellon SP. Registering an SP with an IdP is done via a SP metadata file. The Mellon SP metadata also instructs \fImod_auth_mellon\fR how to operate. The Mellon SP is generated from the \fIsp_metadata.tpl\fR template file.
+
+For mod_auth_openidc this means building JSON object which describes
+the client. It will be sent to the Keycloak server to add the client
+to the realm. For mod_auth_mellon this means building the SAML SP XML
+metadata. The SP metadata is used both by mod_auth_mellon when it
+initializes and is also sent to the Keycloak server when adding the
+client to the Keycloak realm.
+.RE
+.PP
+.B Add the httpd client to the Keycloak server.
+.PP
+\fB*\fR Connect to Keycloak Server.
+.RS
+.PP
+A session is established with the Keycloak server. OAuth2 is used to
+log in as the admin user using the \fB\-\-keycloak\-admin\-username\fR
+and \fB\-\-keycloak\-admin\-password\-file\fR options if you're using
+admin privileges. Otherwise a non-authenticated (e.g. anonymous)
+session is established and an initial access token supplied to you by
+a Keycloak admin will be used to register the client.
 .RE
 .PP
 \fB*\fR Query realms from Keycloak server, optionally create new realm.
 .RS
 .PP
-Keycloak supports multi\-tenancy, it may serve many IdP's each one specified by a Keycloak realm. The \fB\-\-keycloak\-realm\fR option identifies which Keycloak realm we will bind to. The Keycloak realm may already exist on the Keycloak server, if it does \fBkeycloak\-httpd\-client\-install\fR will use it. If the Keycloak realm does not exist yet it will be created for you.
+Keycloak supports multi\-tenancy, it may present many IdP's each one
+specified by a Keycloak realm. The \fB\-\-keycloak\-realm\fR option
+identifies which Keycloak realm we will bind to. The Keycloak realm
+may already exist on the Keycloak server, if it does
+\fBkeycloak\-httpd\-client\-install\fR will use it. If the Keycloak
+realm does not exist yet it will be created for you.
 .PP
 Requires the \fIroot\-admin\fR auth role.
 .RE
@@ -364,19 +569,27 @@ Requires the \fIroot\-admin\fR auth role.
 \fB*\fR Query realm clients from Keycloak server, optionally delete existing.
 .RS
 .PP
-SAML SP's are one type of Keycloak client that can be serviced by the Keycloak realm IdP. The Mellon SP is a new Keycloak client which needs to be added to the Keycloak realm. However we must assure the new client does not conflict with an existing client on the Keycloak realm. If the Mellon SP is already registered on the Keycloak realm \fBkeycloak\-httpd\-client\-install\fR will stop processing and exit with an error unless the \fB\-\-force\fR option is used. \fB\-\-force\fR will cause the existing client on the Keycloak realm to be deleted first so that it can be replaced in the next step.
+Before a new client can be added to the Keycloak realm we must assure
+it does not conflict with an existing client. If the client is already
+registered in the Keycloak realm
+\fBkeycloak\-httpd\-client\-install\fR will stop processing and exit
+with an error unless the \fB\-\-force\fR option is
+used. \fB\-\-force\fR will cause the existing client on the Keycloak
+realm to be deleted first so that it can be replaced in the next step.
 .PP
 Requires either the \fIroot\-admin\fR or \fIrealm\-admin\fR auth role.
 .RE
 .PP
-\fB*\fR Create new SP client in Keycloak realm.
+\fB*\fR Create new client in Keycloak realm.
 .RS
 .PP
-The Mellon SP is registered with the Keycloak realm on the Keycloak server by sending the Keycloak server the Mellon SP metadata to the Keycloak server.
-.PP
-When the client\-originate\-method is \fIdescriptor\fR either the \fIroot\-admin\fR or \fIrealm\-admin\fR auth role is required. When the \fIclient\-originate\-method\fR is \fIregistration\fR the initial access token is mandatory for the \fIanonymous\fR auth role and optional for the \fIroot\-admin\fR or \fIrealm\-admin\fR roles.
+The client description is sent to one of the Keycloak server's REST
+endpoints to add the client to the realm. The choice of which endpoint
+is used and the data format sent is a function of the
+\fIclient\-originate\-method\fR, the auth role and client data
+format. Most users will simply allow the tool to select the optimal
+combination.
 .RE
-
 .PP
 \fB*\fR Adjust client configuration
 .RS
@@ -385,7 +598,6 @@ Override default Keycloak client values. This varies by Keycloak release.
 .PP
 Requires either the \fIroot\-admin\fR or \fIrealm\-admin\fR auth role.
 .RE
-
 .PP
 \fB*\fR Add attributes to be returned in assertion
 .RS
@@ -398,59 +610,145 @@ The client is configured to return necessary attributes. The added attributes ar
 .PP
 Requires either the \fIroot\-admin\fR or \fIrealm\-admin\fR auth role.
 .RE
-
 .PP
 \fB*\fR Retrieve IdP metadata from Keycloak server.
 .RS
 .PP
-The Mellon SP needs SAML metadata that describes the Keycloak IdP. The metadata for the Keycloak IdP is fetched from the Keycloak server and stored in a location referenced in the Mellon SP httpd configuration file. (see \fBFILES\fR)
+The mod_auth_mellon SP needs SAML metadata that describes the Keycloak
+IdP. The metadata for the Keycloak IdP is fetched from the Keycloak
+server and stored in a location referenced in the mod_auth_mellon SP
+httpd configuration file. (see \fBFILES\fR) mod_auth_openidc also
+needs a description of the Keycloak IdP but unlike mod_auth_mellon it
+is capable of fetching the Keycloak IdP description automatically via
+the \fBOIDCProviderMetadataURL\fR directive and periodically
+refreshing it. Therefore this step is skipped for mod_auth_openidc.
 .RE
 
 .PP
 .B STRUCTURE
 .PP
-The overarching organization is the web application. An independent set of Mellon files are created per application and registered with the Keycloak server. This permits multiple indpendent SAML Service Providers and/or protected web resources to be handled by one Apache instance. When you run \fBkeycloak\-httpd\-client\-install\fR you must supply an application name via the \fB\-\-app\-name\fR option.
+The overarching organization is to produce a web application. An
+independent set of mod_auth_openidc or mod_auth_mellon files are
+created per application and registered with the Keycloak server. This
+permits multiple indpendent client and/or protected
+web resources to be handled by one Apache instance. When you run
+\fBkeycloak\-httpd\-client\-install\fR you must supply an application
+name via the \fB\-\-app\-name\fR option.
 .PP
-Within the web application you may protect via SAML multiple independent web resources specified via the \fB\-\-mellon\-protected\-locations\fR /xxx option. This will cause a:
+
+Within the web application you may protect multiple independent web
+resources specified via the \fB\-\-protected\-locations\fR
+/xxx option. This will cause a location block similar to this to be
+generated per location (depending on the client type):
 .PP
-.nf
+.B mod_auth_openidc
 .RS
-<Location>
+.nf
+OIDCClientID ...
+OIDCProviderMetadataURL ...
+OIDCCryptoPassphrase ...
+OIDCClientSecret ...
+OIDCRedirectURI ...
+OIDCRemoteUserClaim ...
+
+<Location /xxx>
+    AuthType openid-connect
+    Require valid-user
+</Location>
+.fi
+.RE
+.B mod_auth_mellon
+.RS
+.nf
+<Location />
+    MellonEnable info
+    MellonEndpointPath ...
+    MellonSPMetadataFile ...
+    MellonSPPrivateKeyFile ...
+    MellonSPCertFile ...
+    MellonIdPMetadataFile ...
+    MellonIdP ...
+</Location>
+
+<Location /xxx>
     AuthType Mellon
     MellonEnable auth
     Require valid-user
 </Location>
-.RE
 .fi
-
+.RE
 .PP
-directive to be added to the Mellon HTTPD configuration file. The Mellon SP parameters are located at the root of the web application root, each protected location inherits from that.
+These will be added to the client's HTTPD configuration file.
+.PP
+The location of the client configuration directives in the client
+configuration file depend on the client type.
+.PP
+For mod_auth_openidc the directives are global to the module and hence
+can be located anywhere outside a location directive. The tool places
+them at the top of the client configuration file.
+.PP
+For mod_auth_mellon the directives must be located in a location block
+handled by mod_auth_mellon. mod_auth_mellon supports directive
+inheritance, thus any mod_auth_mellon location block located below in
+the URL hierarchy will inherit directives from above. To avoid
+duplicate declarations of mod_auth_mellon directives that can be
+shared by subsequent mod_auth_mellon location block (and protect
+against future cut-n-paste errors) the shared common mod_auth_mellon
+directives are located at the \fBlocation\-root\fR.
+.PP
+.B Changes from the previous version
+
+keycloak-httpd-client-install now supports mod_auth_opendic in addtion
+to mod_auth_mellon.
+
+Some mod_auth_mellon specific options (e.g. \fB\-\-mellon\-*\fR) can
+be shared with mod_auth_openidc. These were renamed to have a
+\fB\-\-client\-*\fR prefix instead. The previous names continue to
+work but will emit a deprecaton warning and will be removed in a
+future release.
+
+The \fB{httpd_dir}/saml2\fR directory containing SAML data files
+(e.g. metadata, keys, certs, etc.) has been renamed to
+\fB{httpd_dir}/federation\fR to better reflect it's use as a location
+to store data used in federated authentication.
 
 .SH FILES
 
-Files created by running \fBkeycloak\-httpd\-client\-install\fR:
+Directories and files created by running
+\fBkeycloak\-httpd\-client\-install\fR:
+
 .TP
-.B {httpd\-dir}/conf.d/{app\-name}_mellon_keycloak_{realm}.conf
-This is the primary Mellon configuration file for the application. It
+.B {httpd_dir}/federation
+This directory contains data files used during federated authentication.
+
+.TP
+.B {httpd_dir}/conf.d/{app_name}_mellon_keycloak_{realm}.conf
+This is the primary mod_auth_mellon configuration file for the application. It
 binds to the Keycloak realm IdP. It is generated from the
 \fImellon_httpd.conf\fR template file.
 
 .TP
-.B {httpd\-dir}/saml2/{app\-name}.cert
-The Mellon SP X509 certficate file in PEM format.
+.B {httpd_dir}/federation/{app_name}.cert
+The mod_auth_mellon SP X509 certficate file in PEM format.
 
 .TP
-.B {httpd\-dir}/saml2/{app\-name}.key
-The Mellon SP X509 key file in PEM format.
+.B {httpd_dir}/federation/{app_name}.key
+The mod_auth_mellon SP X509 key file in PEM format.
 
 .TP
-.B {httpd\-dir}/saml2/{app\-name}_keycloak_{realm}_idp_metadata.xml
+.B {httpd_dir}/federation/{app_name}_keycloak_{realm}_idp_metadata.xml
 The Keycloak SAML2 IdP metadata file. It is fetched from the Keycloak server.
 
 .TP
-.B {httpd\-dir}/saml2/{app\-name}_sp_metadata.xml
-The Mellon SAML2 SP metadata file. It is generated from the
+.B {httpd_dir}/federation/{app_name}_sp_metadata.xml
+The mod_auth_mellon SAML2 SP metadata file. It is generated from the
 \fIsp_metadata.xml\fR template file.
+
+.TP
+.B {httpd_dir}/conf.d/{app_name}_oidc_keycloak_{realm}.conf
+This is the primary mod_auth_openidc configuration file for the application. It
+binds to the Keycloak realm IdP. It is generated from the
+\fBoidc_httpd.conf\fR template file.
 
 .PP
 .B Files referenced by \fBkeycloak\-httpd\-client\-install\fR when it runs:
@@ -479,6 +777,33 @@ The \fB\-\-verbose\fR and \fB\-\-debug\fR options can be used to increase the le
 .B TEMPLATES
 .PP
 Many of the files generated by \fBkeycloak\-httpd\-client\-install\fR are produced via jinja2 templates substituting values determined by \fBkeycloak\-httpd\-client\-install\fR when it runs. The default template file location can be overridden with the \fB\-\-template\-dir\fR option.
+
+.PP
+.B {template_dir}/mellon_httpd.conf
+The template used to generate the httpd configuration file for mod_auth_mellon
+{httpd_dir}/conf.d/{app_name}_mellon_keycloak_{realm}.conf
+
+.PP
+.B {template_dir}/sp_metadata.tpl
+The template used to generate SAML SP Metadata.
+
+.PP
+.B {template_dir}/oidc_httpd.conf
+The template used to generate the httpd configuration file for mod_auth_openidc
+{httpd_dir}/conf.d/{app_name}_oidc_keycloak_{realm}.conf
+
+.PP
+.B {template_dir}/oidc-client-registration.tpl
+The template used to generate the OIDC Dynamic Client Registration
+data sent to Keycloak's client registration endpoint
+\fB/realms/{realm}/clients-registrations/openid-connect\fR.
+
+.PP
+.B {template_dir}/oidc-client-representation.tpl
+The template used to generate the Keycloak clientRepresentation JSON
+object used to create a new client using descriptor method or the
+registration method using the default client data format at the
+\fB/realms/{realm}/clients-registrations/default\fR endpoint.
 
 .PP
 .SH EXIT STATUS

@@ -49,7 +49,6 @@ def _add_step_logger():
                           args, **kwargs)
                 self.step_number += 1
 
-    print("jrd adding step logger")
     logging.addLevelName(STEP, 'STEP')
     logging.setLoggerClass(StepLogger)
 
@@ -889,29 +888,6 @@ def install_mellon_cert(options):
         install_file_from_data(cert, options.mellon_dst_cert_file)
 
 #---------------------------- Argparse Utilities -------------------------------
-
-class DeprecatedPasswordAction(argparse.Action):
-    def __init__(self, option_strings, dest, nargs=None, **kwargs):
-        super(DeprecatedPasswordAction, self).__init__(option_strings, dest,
-                                                       **kwargs)
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        msg1 = ('%s Deprecated. Use --keycloak-admin-password-file instead '
-                '(which also accepts - to read from stdin) '
-                'or the KEYCLOAK_ADMIN_PASSWORD environment variable. '
-                'Using "-" to read the password from stdin '
-                'will continue to work for the new few releases for backward '
-                'compatibility, then will be removed. '
-                'See the man page.' % self.option_strings)
-        msg2 = ('Deprecated. It is insecure to pass a password on the '
-                'command line. Use --keycloak-admin-password-file or the '
-                'KEYCLOAK_ADMIN_PASSWORD environment variable instead. '
-                'See the man page.')
-        if values == '-':
-            print(msg1, file=sys.stderr)
-            setattr(namespace, self.dest, values)
-        else:
-            raise argparse.ArgumentError(self, msg2)
 
 class DeprecatedStoreAction(argparse.Action):
     def __init__(self, option_strings, dest, nargs=None, **kwargs):
