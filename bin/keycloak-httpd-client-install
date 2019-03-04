@@ -115,9 +115,6 @@ def arg_type_protected_location(value):
                                          '(arg="%s")' % value)
     return value.rstrip(' /')
 
-class StageUniqueNamesAction(utils.UniqueNamesAction):
-    name_choices = ['client', 'keycloak']
-
 # -----------------------------------------------------------------------------
 
 class KeycloakServer(object):
@@ -194,17 +191,13 @@ class Client(KeycloakServer, object):
         self.options.location_root = '/' + self.options.location_root.strip(' /')
 
     def derive_options(self):
-        if self.options.stages is None:
-            self.options.stages = DEFAULT_STAGES
-
         self.options.httpd_federation_dir = os.path.join(
             self.options.httpd_dir, HTTPD_FEDERATION_DIR)
 
         self.options.httpd_conf_dir = os.path.join(
             self.options.httpd_dir, HTTPD_CONF_DIR)
 
-        if 'keycloak' in self.options.stages:
-            self.derive_server_options()
+        self.derive_server_options()
 
         if self.options.client_data_format is None:
             if self.options.client_type == 'mellon':
@@ -276,8 +269,7 @@ class Client(KeycloakServer, object):
             raise InsufficientPrivilegeError(
                 'You must be root to run this program')
 
-        if 'keycloak' in self.options.stages:
-            self.validate_server_options()
+        self.validate_server_options()
 
         root = utils.join_path(self.options.location_root, '/')
         for location in self.options.protected_locations:
@@ -739,13 +731,6 @@ def main():
 
     # ---- Common Arguments ----
 
-    parser.add_argument('--stages',
-                        action=StageUniqueNamesAction,
-                        help=('Execute one or more stages from choices [client, keycloak]. '
-                              'May be specified multiple times to accumulated multiple '
-                              'names or a single argument may contain multiple space or '
-                              'comma separated names'))
-
     parser.add_argument('--no-root-check', dest='root_check',
                         action='store_false',
                         help='permit running by non-root')
@@ -972,11 +957,9 @@ def main():
         client.derive_options()
         client.validate_options()
         client.post_config_actions()
-        if 'client' in options.stages:
-            client.configure_client()
-        if 'keycloak' in options.stages:
-            client.configure_server()
-            client.post_configure_server_actions()
+        client.configure_client()
+        client.configure_server()
+        client.post_configure_server_actions()
 
     except (OperationError, keycloak_rest.RESTError) as e:
         if options.show_traceback:
