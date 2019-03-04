@@ -6,43 +6,12 @@ Tools to configure Apache HTTPD as Keycloak client
 
 .SH SYNOPSIS
 .B keycloak-httpd-client-install
-[\fB\-h\fR]
-[\fB\-\-no\-root\-check\fR]
-[\fB\-v\fR]
-[\fB\-d\fR]
-[\fB\-\-show\-traceback\fR]
-[\fB\-\-log\-file\fR \fILOG_FILE\fR]
-\fB\-\-app\-name\fR \fIAPP_NAME\fR
-[\fB\-\-force\fR]
-[\fB\-\-permit\-insecure\-transport\fR]
-[\fB\-\-tls\-verify\fR]
-[\fB\-\-template\-dir\fR \fITEMPLATE_DIR\fR]
-[\fB\-\-httpd\-dir\fR \fIHTTPD_DIR\fR] \-r KEYCLOAK_REALM
-\fB\-s\fR \fIKEYCLOAK_SERVER_URL\fR
-[\fB\-a\fR \fIroot\-admin|realm\-admin|anonymous\fR]
-[\fB\-u\fR \fIKEYCLOAK_ADMIN_USERNAME\fR]
-\fB\-P\fR \fIKEYCLOAK_ADMIN_PASSWORD_FILE\fR
-[\fB\-\-keycloak\-admin\-realm\fR \fIKEYCLOAK_ADMIN_REALM\fR]
-[\fB\-\-initial\-access\-token\fR \fIINITIAL_ACCESS_TOKEN\fR]
-[\fB\-\-client\-hostname\fR \fICLIENT_HOSTNAME\fR]
-[\fB\-\-client\-https-port\fR \fCLIENT_HTTPS_PORT\fR]
-[\fB\-\-client\-originate\-method\fR \fIdescriptor|registration\fR]
-[\fB\-\-client\-data\-format\fR \fIdefault|oidc|saml2\fR]
-[\fB\-\-location\-root\fR \fILOCATION_ROOT\fR]
+\fB\-\-app-name \fIAPP_NAME\fR
+\fB\-s\fR | \fB\-\-keycloak-server-url \fIKEYCLOAK_SERVER_URL\fR
+\fB\-r\fR | \fB\-\-keycloak-realm \fIKEYCLOAK_REALM\fR
+\fB\-l\fR | \fB\-\-protected-locations \fIPROTECTED_LOCATIONS\fR
+[ options ]
 
-[\fB\-\-oidc\-redirect\-uri\fR \fIOIDC_REDIRECT_URI\fR]
-[\fB\-\-oidc\-client\-secret\fR \fIOIDC_CLIENT_SECRET\fR]
-[\fB\-\-oidc\-remote\-user\-claim\fR \fIOIDC_REMOTE_USER_CLAIM\fR]
-
-[\fB\-\-mellon\-key\-file\fR \fIMELLON_KEY_FILE\fR]
-[\fB\-\-mellon\-cert\-file\fR \fIMELLON_CERT_FILE\fR]
-[\fB\-\-mellon\-endpoint\fR \fIMELLON_ENDPOINT\fR]
-[\fB\-\-clientid\fR \fICLIENTID\fR]
-[\fB\-\-mellon\-idp\-attr\-name\fR \fIMELLON_IDP_ATTR_NAME\fR]
-[\fB\-\-mellon\-organization\-name\fR \fIMELLON_ORGANIZATION_NAME\fR]
-[\fB\-\-mellon\-organization\-display\-name\fR \fIMELLON_ORGANIZATION_DISPLAY_NAME\fR]
-[\fB\-\-mellon\-organization\-url\fR \fIMELLON_ORGANIZATION_URL\fR]
-[\fB\-l\fR \fIPROTECTED_LOCATIONS\fR]
 
 Configure mod_auth_mellon or mod_auth_openidc as Keycloak client
 
@@ -134,24 +103,12 @@ realm admin belongs to
 .BR \-\-initial\-access\-token " " \fIINITIAL_ACCESS_TOKEN\fR
 realm initial access token for client registeration
 (default: None)
-
-.PP
-.B Common Client Options
-
 .TP
-.BR \-\-client\-hostname " " \fICLIENT_HOSTNAME\fR
-The fully qualified host name the client is running on or responds to.
-.TP
-.BR \-\-client\-https\-port " " \fICLIENT_HTTPS_PORT\fR
-SSL/TLS port used to connect to client
-
-
-.TP
-.BR \-\-client\-originate\-method " " \fIdescriptor|registration\fR
+.BR \-\-client\-originate\-method " " \fInative|registration\fR
 The method used on the Keycloak REST interface for creating a new client.
 There are two possibilities.
 .RS
-.B descriptor
+.B native
 .RS
 A Keycloak clientRespresentation JSON object is sent to the Keycloak
 client REST endpoint. This is a native Keycloak data format understood
@@ -170,7 +127,7 @@ registration method has the advantage of not requiring admin
 privileges, see the \fBAuthentication Levels and Permissions\fR and
 \BDetermining which authentication role to use\fR topics for
 details.
-(default: descriptor)
+(default: native)
 .RE
 .RE
 .TP
@@ -205,6 +162,41 @@ A SAML metadata entity descriptor in XML format sent to the
 .RE
 .RE
 
+.PP
+.B Common Client Options
+
+.TP
+.BR \-t ", " \-\-client\-type " " \fIopenidc|mellon\fR
+Which kind of client. For mod_auth_openidc use "openidc".
+For mod_auth_mellon use "mellon".
+.TP
+.BR \-\-clientid " " \fICLIENTID\fR
+The \fBclientid\fR Keycloak identifies the client by. This has different
+meanings depending on the type of client.
+.RS
+.B SAML
+.RS
+It is the \fBEntityID\fR and defaults to
+{client_https_url}/{mellon_root}/{mellon_endpoint_path}/metadata)
+.RE
+.RE
+.RS
+.B OIDC
+.RS
+It is the \fBclientid\fR and defaults to
+{client_hostname}-{app_name}
+.RE
+.RE
+.TP
+.BR \-\-client\-hostname " " \fICLIENT_HOSTNAME\fR
+The fully qualified host name the client is running on or responds to.
+.TP
+.BR \-\-client\-https\-port " " \fICLIENT_HTTPS_PORT\fR
+SSL/TLS port used to connect to client
+.TP
+.BR \-\-crypto\-passphrase " " \fICRYPTO_PASSPHRASE\fR
+Used to encrypt cookies, cache data, etc.
+If not supplied a random string will be generated.
 .TP
 .BR \-\-location\-root " " \fILOCATION_ROOT\fR
 Common root ancestor for all protected locations
@@ -246,24 +238,6 @@ certficate file
 Used to form the MellonEndpointPath, e.g.
 {mellon_root}/{mellon_endpoint}
 (default: mellon)
-.TP
-.BR \-\-clientid " " \fICLIENTID\fR
-The \fBclientid\fR Keycloak identifies the client by. This has different
-meanings depending on the type of client.
-.RS
-.B SAML
-.RS
-It is the \fBEntityID\fR and defaults to
-{client_https_url}/{mellon_root}/{mellon_endpoint_path}/metadata)
-.RE
-.RE
-.RS
-.B OIDC
-.RS
-It is the \fBclientid\fR and defaults to
-{client_hostname}-{app_name}
-.RE
-.RE
 .TP
 .BR \-\-mellon\-idp\-attr\-name " " \fIMELLON_IDP_ATTR_NAME\fR
 Name of the attribute mod_auth_mellon adds which will contain the IdP entity id
@@ -350,7 +324,7 @@ sudo keycloak\-httpd\-client\-install \\
 .RE
 .PP
 Note, by default mod_auth_openidc will be configured as the client. To
-configure mod_auth_mellon instead add this option: \fB\-\-client mellon\fR.
+configure mod_auth_mellon instead add this option: \fB\-\-client\-type mellon\fR.
 .PP
 .B How to pass the Keycloak admin password
 
@@ -451,7 +425,7 @@ is either \fIroot\-admin\fR or \fIrealm\-admin\fR the tool has
 sufficient privilige to obtain an initial access token on it's behalf
 negating the need for a Keycloak admin to supply one externally.
 .RE
-\fBdescriptor\fR
+\fBnative\fR
 .RS
 This method sends Keycloak's native
 clientRepresentation JSON object to the
@@ -707,6 +681,9 @@ be shared with mod_auth_openidc. These were renamed to have a
 work but will emit a deprecaton warning and will be removed in a
 future release.
 
+The \fB\-\-client\-originate\fR \fBdescriptor\fR method has been
+renamed to \fBnative\fR.
+
 The \fB{httpd_dir}/saml2\fR directory containing SAML data files
 (e.g. metadata, keys, certs, etc.) has been renamed to
 \fB{httpd_dir}/federation\fR to better reflect it's use as a location
@@ -801,7 +778,7 @@ data sent to Keycloak's client registration endpoint
 .PP
 .B {template_dir}/oidc-client-representation.tpl
 The template used to generate the Keycloak clientRepresentation JSON
-object used to create a new client using descriptor method or the
+object used to create a new client using native method or the
 registration method using the default client data format at the
 \fB/realms/{realm}/clients-registrations/default\fR endpoint.
 

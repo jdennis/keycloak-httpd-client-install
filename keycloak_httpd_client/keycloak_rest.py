@@ -88,7 +88,7 @@ class RESTError(Exception):
             self.message += '"{response_text}"'.format(
                 response_text=self.response_text)
 
-        logger.error(self.message)
+        logger.debug(self.message)
         self.args = (self.message,)
 
     def __str__(self):
