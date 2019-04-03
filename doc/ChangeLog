@@ -1,3 +1,8 @@
+2019-04-03  John Dennis  <jdennis@redhat.com> 1.0
+  * Major refactoring to support newly introduced mod_auth_openidc support
+  * Support mod_auth_openidc
+  * See keycloak-httpd-client-install man page for new command line options
+    and deprecated options
 2018-01-09  John Dennis  <jdennis@redhat.com> 0.8
   * CVE-2017-15112 unsafe use of -p/--admin-password on command line
   * CVE-2017-15111 unsafe /tmp log file in --log-file option in keycloak_cli.py
