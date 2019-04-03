@@ -21,6 +21,7 @@ HTTPD in conjunction with Keycloak.
 Currently the tool supports the following Apache HTTPD authentication
 modules and authentication protocols:
 
-| Authentication Module | Protocol |
-|-----------------------|----------|
-| mod_auth_mellon       | SAML2    |
+| Authentication Module | Protocol       |
+|-----------------------|----------------|
+| mod_auth_mellon       | SAML2          |
+| mod_auth_openidc      | OpenID Connect |
