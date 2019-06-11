@@ -852,7 +852,6 @@ def main():
                        'defaults to {client_hostname}-{app_name}')
 
     group.add_argument('-l', '--protected-locations', action='append',
-                       required=True,
                        type=arg_type_protected_location, default=[],
                        help='Web location to protect with client. '
                             'May be specified multiple times')
@@ -935,6 +934,9 @@ def main():
     # ===== Process command line arguments =====
 
     options = parser.parse_args()
+
+    if len(options.protected_locations) == 0:
+        parser.error("You must specify -l/--protected-locations")
 
     # ===== Configure Logging =====
 
