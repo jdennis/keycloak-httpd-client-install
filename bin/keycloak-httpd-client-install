@@ -920,15 +920,19 @@ def main():
 
 
     group.add_argument('--mellon-hostname', action=utils.DeprecatedStoreAction,
+                       dest='client_hostname',
                        help='use --client-hostname')
 
     group.add_argument('--mellon-https-port', action=utils.DeprecatedStoreAction,
+                       dest='client_https_port',
                        help='User --client-https-port')
 
     group.add_argument('--mellon-root', action=utils.DeprecatedStoreAction,
+                       dest='location_root',
                        help='Use --location-root')
 
     group.add_argument('--mellon-entity-id', action=utils.DeprecatedStoreAction,
+                       dest='clientid',
                        help='use --clientid')
 
     # ===== Process command line arguments =====
