@@ -839,7 +839,7 @@ def main():
     group = parser.add_argument_group('Common Client')
 
     group.add_argument('-t', '--client-type', choices=['mellon', 'openidc'],
-                        default='openidc',
+                        default='mellon',
                         help=('Which type of client to configure. '
                               '"mellon" for mod_auth_mellon, '
                               '"openidc" for mod_auth_openidc.'))
