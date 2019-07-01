@@ -211,6 +211,14 @@ protected locations.
 (default: The first protected location appened with "/redirect_uri")
 
 .TP
+.BR \-\-oidc\-logout\-uri " " \fIOIDC_REDIRECT_URI\fR
+Can be used to add the location the user is redirected to after logout as
+an additional redirectUri value in Keycloak's client representation. The
+location should not be nested under any of the protected locations,
+otherwise the login process would start again.
+(default: None)
+
+.TP
 .BR \-\-oidc\-client\-secret " " \fIOIDC_CLIENT_SECRET\fR
 OIDC client secret
 (default: generated random string)
