@@ -17,6 +17,7 @@ import six
 from six.moves.urllib.parse import urlsplit, urlunsplit
 
 from keycloak_httpd_client import keycloak_rest
+from keycloak_httpd_client import __version__
 import keycloak_httpd_client.utils as utils
 
 # ----------------------------- Global Variables ------------------------------
@@ -731,6 +732,10 @@ def main():
 
     # ---- Common Arguments ----
 
+    parser.add_argument('--version', dest='display_version',
+                        action='store_true',
+                        help='display version then exit')
+
     parser.add_argument('--no-root-check', dest='root_check',
                         action='store_false',
                         help='permit running by non-root')
@@ -941,6 +946,12 @@ def main():
                        help='use --clientid')
 
     # ===== Process command line arguments =====
+
+    # Do not allow the arg parser to generate errors related to missing
+    # required options if all we want to do is dump the version.
+    if '--version' in sys.argv:
+        print('version %s' % (__version__))
+        return STATUS_SUCCESS
 
     options = parser.parse_args()
 
