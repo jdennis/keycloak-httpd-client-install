@@ -886,6 +886,11 @@ def main():
                        help='claim used when setting the REMOTE_USER variable, '
                        'default="sub"')
 
+    group.add_argument('--oidc-logout-uri',
+                       help='Should not be a child of one of the protected '
+                       'locations. When set, adds the argument as a valid '
+                       'redirectUri for Keycloak')
+
     # ---- Argument Group "Mellon SP"  ----
 
     group = parser.add_argument_group('Mellon SP')
