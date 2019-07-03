@@ -1,3 +1,7 @@
+2019-07-03  John Dennis  <jdennis@redhat.com> 1.1
+  * Fix github issue 9: doc: Fix a typo in --oidc-redirect-uri description
+  * Fix github issue 10: Add a new --oidc-logout-uri command line option
+  * Add --version option to display installed version
 2019-04-03  John Dennis  <jdennis@redhat.com> 1.0
   * Major refactoring to support newly introduced mod_auth_openidc support
   * Support mod_auth_openidc
