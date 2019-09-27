@@ -103,6 +103,7 @@ install -c -m 644 doc/keycloak-httpd-client-install.8 %{buildroot}/%{_mandir}/ma
 %{python2_sitelib}/*
 %if ! 0%{?with_python3}
 %{_bindir}/keycloak-httpd-client-install
+%{_bindir}/keycloak-rest
 %{_mandir}/man8/*
 %endif
 
